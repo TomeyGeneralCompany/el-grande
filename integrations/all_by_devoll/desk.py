@@ -614,7 +614,7 @@ def render(rows, catalog=None):
 <h2>Ticket log</h2>''' + "".join(items) + '''</main><footer>INTERNAL ESTIMATE ONLY — mechanic reviews and phones customer with any proposed price. Never sent or offered automatically. Supplier prices require verified vendor feed. 15% applies to finalized bill before expenses.</footer></body></html>'''
 
 class Handler(BaseHTTPRequestHandler):
-    def headers(self,code=200,typ="text/html; charset=utf-8"):
+    def response_headers(self,code=200,typ="text/html; charset=utf-8"):
         self.send_response(code);self.send_header("Content-Type",typ)
         self.send_header("Cache-Control","no-store");self.send_header("X-Content-Type-Options","nosniff")
         self.send_header("Content-Security-Policy","default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
@@ -625,7 +625,7 @@ class Handler(BaseHTTPRequestHandler):
         hostname=(self.headers.get("Host","").split(":",1)[0] or "").lower()
         if not PASSWORD:
             if hostname not in ("127.0.0.1","localhost","[::1]"):
-                self.headers(403,"text/plain")
+                self.response_headers(403,"text/plain")
                 self.wfile.write(b"Local-only dashboard. Open http://127.0.0.1:8765 on this computer.")
                 return False
             return True
@@ -636,7 +636,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Cache-Control","no-store");self.end_headers();return False
         return True
     def response_text(self,content,code=200,typ="text/html; charset=utf-8"):
-        self.headers(code,typ);self.wfile.write(content.encode("utf-8"))
+        self.response_headers(code,typ);self.wfile.write(content.encode("utf-8"))
     def do_GET(self):
         if not self.auth():return
         path=urlsplit(self.path).path
