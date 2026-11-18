@@ -179,7 +179,12 @@ public class apiServer {
                 }
             server = createServerBS(port, true, prop);
         } else {
-            server = new Server(port);
+            // Local office workstation: bind the BlueSeer API to loopback only.
+            server = new Server();
+            ServerConnector localConnector = new ServerConnector(server);
+            localConnector.setHost("127.0.0.1");
+            localConnector.setPort(port);
+            server.addConnector(localConnector);
         }
         
         
