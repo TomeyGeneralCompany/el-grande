@@ -48,15 +48,12 @@ class ShopUITests(unittest.TestCase):
         page=self.page()
         self.assertNotIn("<script>alert(1)</script>",page)
         self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;",page)
-    def test_connection_labels_reflect_reality(self):
-        page=self.page({"mailbox":False,"report":False,
-                       "erp":{"running":False,"configured":False}})
-        self.assertIn("Business inbox not connected",page)
-        self.assertIn("BlueSeer not responding",page)
-        page=self.page({"mailbox":True,"report":True,
-                       "erp":{"running":True,"configured":False}})
-        self.assertIn("BlueSeer responding · setup needed",page)
-        self.assertIn("Business inbox configured",page)
+    def test_settings_are_in_app_not_instructions_on_dashboard(self):
+        page=self.page()
+        self.assertIn('href="/settings"',page)
+        self.assertNotIn('open <strong>El Grande Setup</strong>',page)
+        self.assertNotIn("Office connections",page)
+        self.assertNotIn("BlueSeer not responding",page)
     def test_unchanged_price_after_native_sync_is_not_rejected(self):
         with desk.db() as con:
             con.execute("INSERT INTO blue_sync(ticket_id,kind,record_number,state,updated_at) VALUES (?,?,?,?,?)",
