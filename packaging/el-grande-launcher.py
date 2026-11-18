@@ -83,6 +83,18 @@ def try_dashboard():
         return False
 
 def open_dashboard():
+    # The installed El Grande app owns both the job desk and ERP runtime.
+    # The mechanic never needs to launch BlueSeer as a separate program.
+    try:
+        prepare_local_data()
+    except OSError as err:
+        messagebox.showerror("El Grande storage",str(err))
+        return
+    service("daemon-reload")
+    api=service("enable","--now","el-grande-api.service")
+    if api.returncode:
+        messagebox.showwarning("Accounting","BlueSeer could not start automatically. "
+                               "The shop dashboard will still open.")
     if try_dashboard():
         webbrowser.open(URL)
         return
