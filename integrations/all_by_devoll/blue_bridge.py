@@ -110,7 +110,8 @@ def sales_lines(ticket,math):
     labor=math["labor"]
     if labor>0:
         rows.append(line(os.environ["ABD_BLUESEER_LABOR_ITEM"],
-                         "Mechanic labor (internal estimate)",labor,1))
+                         "Mechanic labor (internal estimate)",
+                         ticket["labor_rate"],ticket["labor_hours"]))
     price=Decimal(str(ticket["parts_charge"] or "0"))
     if price>0:
         rows.append(line(os.environ["ABD_BLUESEER_PARTS_ITEM"],
