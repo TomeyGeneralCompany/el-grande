@@ -288,7 +288,12 @@ def update_ticket(ticket_id,data):
                     raise ValueError("Invalid BlueSeer customer or ship-to code")
                 cleaned[bluefield]=code
         if not cleaned:return
-        if any(k in cleaned and str(cleaned[k]) != str(before[k]) for k in (*MONEY_FIELDS,"blue_customer","blue_ship_to")):
+        def financial_change(k):
+            if k not in cleaned:return False
+            if k in MONEY_FIELDS:
+                return Decimal(str(cleaned[k])) != Decimal(str(before[k] or "0"))
+            return str(cleaned[k]) != str(before[k])
+        if any(financial_change(k) for k in (*MONEY_FIELDS,"blue_customer","blue_ship_to")):
             linked=con.execute("SELECT kind FROM blue_sync WHERE ticket_id=? AND state='synced' LIMIT 1",(ticket_id,)).fetchone()
             if linked:
                 raise ValueError("Quote/service order already synchronized to BlueSeer. Amend that native record before changing the linked financial details.")
