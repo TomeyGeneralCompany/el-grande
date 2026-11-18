@@ -28,6 +28,7 @@ from pathlib import Path
 import parts
 import blue_bridge
 import invoice_bridge
+import customer_bridge
 from urllib.parse import parse_qs, urlsplit
 
 ROOT = Path(__file__).resolve().parent
@@ -369,6 +370,31 @@ def parts_poller():
         except Exception:log.exception("Supplier feed update failed; previous prices retained with source dates")
         time.sleep(max(300,int(os.getenv("ABD_PARTS_POLL_SECONDS","3600"))))
 
+def blue_customer(ticket_id):
+    with db() as con:
+        row=con.execute("SELECT * FROM tickets WHERE id=?",(ticket_id,)).fetchone()
+        if row is None:raise LookupError("Ticket not found")
+        if row["finalized_at"]:raise ValueError("Customer mapping is locked after finalizing the bill")
+        prior=con.execute("SELECT kind FROM blue_sync WHERE ticket_id=? AND state='synced' LIMIT 1",(ticket_id,)).fetchone()
+        if prior:raise ValueError("Customer mapping is locked after posting native quote/order")
+        # Reuse previously matched customer only if BOTH phone and name agree.
+        match=con.execute("""SELECT blue_customer,blue_ship_to FROM tickets
+                 WHERE phone=? AND lower(customer)=lower(?) AND blue_customer!=''
+                 AND id!=? ORDER BY id DESC LIMIT 1""",
+                 (row["phone"],row["customer"],ticket_id)).fetchone() if row["phone"] else None
+        if match:
+            customer,ship=match["blue_customer"],match["blue_ship_to"]
+            action="reused"
+        else:
+            customer,action=customer_bridge.upsert_customer(row)
+            ship=customer
+        now=utc()
+        con.execute("UPDATE tickets SET blue_customer=?,blue_ship_to=?,updated_at=? WHERE id=?",
+                    (customer,ship,now,ticket_id))
+        con.execute("INSERT INTO events(ticket_id,timestamp,event,detail) VALUES(?,?,?,?)",
+                    (ticket_id,now,"blue_customer_"+action,customer))
+    return customer
+
 def blue_sync(ticket_id,kind):
     if kind not in ("quote","service_order"):raise ValueError("Unknown sync type")
     with db() as con:
@@ -440,7 +466,7 @@ def render(rows, catalog=None):
         attached_html="".join(f'<li>{escape(p["supplier"])} {escape(p["sku"])} — {escape(p["description"])} · {escape(p["quantity"])} × ${escape(p["unit_cost"])} supplier cost · ${escape(p["unit_sale"])} billable · price checked {escape(p["checked_at"])}</li>' for p in attached)
         sync_html=" ".join(f'{escape(v["kind"])}: {escape(v["state"])} ({escape(v["record_number"])})' for v in syncrows)
         selected_supplier=f'<form method="post" action="/ticket/{key}/part"><div class="fields"><label>Verified supplier<input name="supplier" required></label><label>Supplier SKU<input name="sku" required></label><label>Quantity<input type="number" name="quantity" min=".01" step=".01" value="1" required></label></div><button type="submit">Add supplier-priced part</button></form>' if not row["finalized_at"] else ""
-        blue_actions=(f'<form method="post" action="/ticket/{key}/blue-quote"><button type="submit" class="secondary">Save internal draft to BlueSeer quote</button></form><form method="post" action="/ticket/{key}/blue-order"><button type="submit" class="secondary">Create BlueSeer service order</button></form>' if not row["finalized_at"] else "")
+        blue_actions=(f'<form method="post" action="/ticket/{key}/blue-customer"><button type="submit" class="secondary">Create / reuse native BlueSeer customer</button></form><form method="post" action="/ticket/{key}/blue-quote"><button type="submit" class="secondary">Save internal draft to BlueSeer quote</button></form><form method="post" action="/ticket/{key}/blue-order"><button type="submit" class="secondary">Create BlueSeer service order</button></form>' if not row["finalized_at"] else "")
         def field(name,title):
             return f'<label>{title}<input name="{name}" type="number" min="0" step="0.01" value="{escape(row[name])}"></label>'
         opts="".join(f'<option value="{s}" {"selected" if s==row["status"] else ""}>{s.replace("_"," ").title()}</option>' for s in STATUS)
@@ -549,7 +575,7 @@ class Handler(BaseHTTPRequestHandler):
                 ident="manual:"+secrets.token_hex(16)
                 ident_id,_=create_ticket(data,ident)
             else:
-                found=re.fullmatch(r"/ticket/(\d+)/(update|finalize|suggest|paid|part|blue-quote|blue-order|blue-invoice)",path)
+                found=re.fullmatch(r"/ticket/(\d+)/(update|finalize|suggest|paid|part|blue-customer|blue-quote|blue-order|blue-invoice)",path)
                 if not found:return self.response_text("Not found",404,"text/plain")
                 ident_id=int(found.group(1))
                 action=found.group(2)
@@ -558,6 +584,7 @@ class Handler(BaseHTTPRequestHandler):
                 if action=="suggest":suggest(ident_id)
                 if action=="paid":mark_paid(ident_id)
                 if action=="part":save_part(ident_id,data.get("supplier",""),data.get("sku",""),data.get("quantity","1"))
+                if action=="blue-customer":blue_customer(ident_id)
                 if action=="blue-quote":blue_sync(ident_id,"quote")
                 if action=="blue-order":blue_sync(ident_id,"service_order")
                 if action=="blue-invoice":invoice_native(ident_id)
