@@ -65,6 +65,23 @@ class SupplierTests(unittest.TestCase):
  def test_out_of_stock_refused(self):
     app.import_parts(CSV.replace("in_stock","out_of_stock"),"test")
     with self.assertRaises(ValueError):app.save_part(self.id,"DemoSupplier","ST-123","1")
+ def test_local_qwen_structured_estimate_is_internal(self):
+    import io
+    import json
+    self.assertEqual(app.import_parts(CSV,"authorized vendor sample"),2)
+    response=json.dumps({"response":json.dumps({
+         "labor_hours_min":1.5,"labor_hours_max":2.5,
+         "diagnostic_steps":["Check charging voltage"],
+         "parts_to_check":["Starter assembly"],
+         "uncertainties":["Confirm engine specification"]})}).encode()
+    with patch.object(app.urllib.request,"urlopen",return_value=io.BytesIO(response)):
+        app.suggest(self.id)
+    with app.db() as con:
+        row=con.execute("SELECT * FROM tickets WHERE id=?",(self.id,)).fetchone()
+    self.assertEqual(row["labor_hours"],"2.00")
+    self.assertIn("INTERNAL PRELIMINARY",row["ai_notes"])
+    self.assertIn("DemoSupplier / ST-123",row["ai_notes"])
+    self.assertEqual(row["parts_cost"],"0")
  def test_supplier_feed_rejects_unauthorized_origin(self):
     with patch.dict(os.environ,{"ABD_PARTS_FEED_URL":"http://evil.example/prices","ABD_PARTS_FEED_HOST":"evil.example"}):
         with self.assertRaises(ValueError):parts.supplier_feed()
