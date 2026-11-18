@@ -620,8 +620,15 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Security-Policy","default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
         self.send_header("X-Frame-Options","DENY");self.end_headers()
     def auth(self):
+        # A single-machine installation should open on localhost without a login.
+        # Explicit remote binding still requires an operator password.
+        hostname=(self.headers.get("Host","").split(":",1)[0] or "").lower()
         if not PASSWORD:
-            self.headers(503,"text/plain");self.wfile.write(b"Set ABD_DASHBOARD_PASSWORD before starting the desk.");return False
+            if hostname not in ("127.0.0.1","localhost","[::1]"):
+                self.headers(403,"text/plain")
+                self.wfile.write(b"Local-only dashboard. Open http://127.0.0.1:8765 on this computer.")
+                return False
+            return True
         value=self.headers.get("Authorization","")
         expected="Basic "+base64.b64encode(("operator:"+PASSWORD).encode()).decode()
         if not secrets.compare_digest(value,expected):
@@ -709,7 +716,10 @@ def main():
     init()
     if BIND not in ("127.0.0.1","::1","localhost") and os.getenv("ABD_ALLOW_REMOTE")!="yes":
         raise SystemExit("Refusing remote bind; use a TLS/authenticated reverse proxy and ABD_ALLOW_REMOTE=yes")
-    if not PASSWORD:raise SystemExit("Set a strong ABD_DASHBOARD_PASSWORD before launch.")
+    if BIND not in ("127.0.0.1","::1","localhost") and not PASSWORD:
+        raise SystemExit("Remote dashboard access requires ABD_DASHBOARD_PASSWORD.")
+    if not PASSWORD:
+        log.info("Local-only mode: no dashboard password required; browser access restricted to localhost.")
     if IMAP_USER and IMAP_PASSWORD:
         threading.Thread(target=poller,daemon=True).start()
     if os.getenv("ABD_OWNER_REPORT_TO"):
