@@ -121,8 +121,28 @@ def configure():
     field(general,"ABD_OWNER_REPORT_TO","Email completed-job reports to","isaiztomey7@gmail.com")
     field(general,"ABD_IMAP_USER","Business inbox","allbydevoll@gmail.com")
     field(general,"ABD_IMAP_APP_PASSWORD","Google app password for the business inbox",secret=True)
-    ttk.Label(general,text="The inbox and email reports work once Google's app password is entered. "
-              "You can leave it blank while trying the desk.",wraplength=530).pack(anchor="w",pady=12)
+    ttk.Label(general,text="Email is optional for the initial trial. Job reports go to the owner address above.",
+              wraplength=530).pack(anchor="w",pady=10)
+    def test_business_mail():
+        import imaplib
+        username=vars_["ABD_IMAP_USER"].get().strip()
+        password=vars_["ABD_IMAP_APP_PASSWORD"].get().strip().replace(" ","")
+        if not username or not password:
+            messagebox.showinfo("Email connection","Enter the business Gmail address and app password first.")
+            return
+        client=None
+        try:
+            client=imaplib.IMAP4_SSL("imap.gmail.com",timeout=12)
+            client.login(username,password)
+        except (OSError,imaplib.IMAP4.error) as err:
+            messagebox.showerror("Business email","Gmail login could not be verified: "+str(err)[:260])
+        else:
+            messagebox.showinfo("Business email","Business inbox login succeeded. New website tickets can be imported after saving these settings.")
+        finally:
+            if client is not None:
+                try:client.logout()
+                except Exception:pass
+    ttk.Button(general,text="Test business Gmail connection",command=test_business_mail).pack(anchor="w")
     ttk.Label(accounting,text="Connect the bundled BlueSeer ERP",font=("Sans",13,"bold")).pack(anchor="w")
     ttk.Label(accounting,text="Business accounting requires the actual BlueSeer user, account and item codes. "
               "Leave these blank until they are configured.",wraplength=530).pack(anchor="w",pady=(0,8))
@@ -191,6 +211,7 @@ def configure():
         vals["ABD_DB"]=str(DATA/"data"/"tickets.sqlite3")
         vals["ABD_BLUESEER_URL"]="http://127.0.0.1:8088/bsapi"
         vals["ABD_BLUESEER_CURRENCY"]="USD"
+        vals["ABD_IMAP_APP_PASSWORD"]=vals["ABD_IMAP_APP_PASSWORD"].replace(" ","")
         vals["ABD_REPORT_SMTP_USER"]=vals["ABD_IMAP_USER"] if vals["ABD_IMAP_APP_PASSWORD"] else ""
         try:
             service("disable","--now","all-by-devoll-desk.service")
