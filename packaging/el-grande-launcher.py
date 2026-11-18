@@ -66,7 +66,7 @@ def configure():
     env=read_env()
     root=tk.Tk()
     root.title("El Grande — First Run Setup")
-    root.geometry("560x420")
+    root.geometry("560x360")
     root.resizable(False,False)
     frm=ttk.Frame(root,padding=22);frm.pack(fill="both",expand=True)
     ttk.Label(frm,text="EL GRANDE",font=("Sans",20,"bold")).pack(anchor="w")
@@ -77,21 +77,19 @@ def configure():
         var=tk.StringVar(value=env.get(key,default))
         ttk.Entry(frm,textvariable=var,width=62,show="*" if secret else "").pack(fill="x")
         vars_[key]=var
-    field("ABD_DASHBOARD_PASSWORD","Dashboard password (create your own)",secret=True)
     field("ABD_OWNER_REPORT_TO","Owner's completed-job report address","isaiztomey7@gmail.com")
     field("ABD_IMAP_USER","Business Gmail address (leave blank for demo mode)","allbydevoll@gmail.com")
     field("ABD_IMAP_APP_PASSWORD","Gmail app password (optional until email is connected)",secret=True)
-    ttk.Label(frm,text="No customer estimates are emailed. Accounting postings are OFF until verified.",wraplength=500).pack(anchor="w",pady=12)
+    ttk.Label(frm,text="No dashboard password on this computer. Access is localhost-only.\nNo customer estimates are emailed. Accounting postings remain OFF.",wraplength=500).pack(anchor="w",pady=12)
     def save():
         vals={k:v.get().strip() for k,v in vars_.items()}
-        if len(vals["ABD_DASHBOARD_PASSWORD"])<12:
-            messagebox.showerror("Password","Choose a dashboard password with at least 12 characters.")
-            return
         recipient=vals["ABD_OWNER_REPORT_TO"]
         if "@" not in recipient or recipient.count("@")!=1:
             messagebox.showerror("Email","Enter a valid owner report email.")
             return
         vals["ABD_BLUESEER_ENABLE_LIVE_INVOICES"]="no"
+        vals["ABD_BIND"]="127.0.0.1"
+        vals["ABD_DASHBOARD_PASSWORD"]=""
         vals["ABD_REPORT_SMTP_USER"]=vals["ABD_IMAP_USER"] if vals["ABD_IMAP_APP_PASSWORD"] else ""
         try:
             write_env(vals)
@@ -103,14 +101,14 @@ def configure():
                 raise RuntimeError(res.stderr.strip() or "Failed to start job desk")
         except (OSError,ValueError,RuntimeError) as exc:
             messagebox.showerror("Setup failed",str(exc));return
-        messagebox.showinfo("Installed","El Grande is configured. The dashboard opens in your browser.\n\nUsername: operator\nPassword: the password you chose.")
+        messagebox.showinfo("Installed","El Grande is configured. The local dashboard opens without a password.")
         root.destroy()
         webbrowser.open(URL)
     ttk.Button(frm,text="Save & Open Job Desk",command=save).pack(anchor="e",pady=6)
     root.mainloop()
 
 def main():
-    if "--setup" in sys.argv or not ENV.exists() or not read_env().get("ABD_DASHBOARD_PASSWORD"):
+    if "--setup" in sys.argv or not ENV.exists():
         configure()
     else:
         open_dashboard()
