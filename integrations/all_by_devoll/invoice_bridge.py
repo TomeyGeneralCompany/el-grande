@@ -58,7 +58,7 @@ def prepare_invoice(ticket,math,shipper_id,client):
             SHD_FIELDS,shd_id=str(shipper_id),shd_line=i,shd_item=item,
             shd_custitem=item,shd_so=key,shd_soline=i,
             shd_date=today,shd_qty=qty,shd_uom="EA",shd_curr=currency,
-            shd_netprice=price,shd_listprice=price,shd_desc=desc,
+            shd_netprice=price,shd_listprice=price,shd_disc=0.0,shd_desc=desc,
             shd_taxamt=0,shd_cont="0",shd_site=site,shd_packqty=1))
     price=sum((Decimal(str(d["shd_qty"]))*Decimal(str(d["shd_netprice"])) for d in details),Decimal("0")).quantize(Decimal(".01"))
     if price!=math["basis"]:
