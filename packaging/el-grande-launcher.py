@@ -95,51 +95,123 @@ def open_dashboard():
 def configure():
     env=read_env()
     root=tk.Tk()
-    root.title("El Grande — First Run Setup")
-    root.geometry("560x360")
-    root.resizable(False,False)
-    frm=ttk.Frame(root,padding=22);frm.pack(fill="both",expand=True)
+    root.title("El Grande — Office Setup")
+    root.geometry("630x610")
+    root.minsize(570,560)
+    frm=ttk.Frame(root,padding=20)
+    frm.pack(fill="both",expand=True)
     ttk.Label(frm,text="EL GRANDE",font=("Sans",20,"bold")).pack(anchor="w")
-    ttk.Label(frm,text="All by Devoll — job desk and owner reporting",font=("Sans",10)).pack(anchor="w",pady=(0,14))
+    ttk.Label(frm,text="All by Devoll · Office connections and setup").pack(anchor="w",pady=(0,12))
+    notebook=ttk.Notebook(frm)
+    notebook.pack(fill="both",expand=True)
+    general=ttk.Frame(notebook,padding=15)
+    accounting=ttk.Frame(notebook,padding=15)
+    notebook.add(general,text="Office & Email")
+    notebook.add(accounting,text="BlueSeer Accounting")
     vars_={}
-    def field(key,title,default="",secret=False):
-        ttk.Label(frm,text=title).pack(anchor="w",pady=(8,2))
+    def field(parent,key,title,default="",secret=False):
+        ttk.Label(parent,text=title).pack(anchor="w",pady=(7,2))
         var=tk.StringVar(value=env.get(key,default))
-        ttk.Entry(frm,textvariable=var,width=62,show="*" if secret else "").pack(fill="x")
+        ttk.Entry(parent,textvariable=var,width=66,show="*" if secret else "").pack(fill="x")
         vars_[key]=var
-    field("ABD_OWNER_REPORT_TO","Owner's completed-job report address","isaiztomey7@gmail.com")
-    field("ABD_IMAP_USER","Business Gmail address (leave blank for demo mode)","allbydevoll@gmail.com")
-    field("ABD_IMAP_APP_PASSWORD","Gmail app password (optional until email is connected)",secret=True)
-    ttk.Label(frm,text="No dashboard password on this computer. Access is localhost-only.\nNo customer estimates are emailed. Accounting postings remain OFF.",wraplength=500).pack(anchor="w",pady=12)
+    ttk.Label(general,text="Job Desk",font=("Sans",13,"bold")).pack(anchor="w")
+    ttk.Label(general,text="The local dashboard opens directly, with no separate login.").pack(anchor="w")
+    field(general,"ABD_OWNER_REPORT_TO","Email completed-job reports to","isaiztomey7@gmail.com")
+    field(general,"ABD_IMAP_USER","Business inbox","allbydevoll@gmail.com")
+    field(general,"ABD_IMAP_APP_PASSWORD","Google app password for the business inbox",secret=True)
+    ttk.Label(general,text="The inbox and email reports work once Google's app password is entered. "
+              "You can leave it blank while trying the desk.",wraplength=530).pack(anchor="w",pady=12)
+    ttk.Label(accounting,text="Connect the bundled BlueSeer ERP",font=("Sans",13,"bold")).pack(anchor="w")
+    ttk.Label(accounting,text="Business accounting requires the actual BlueSeer user, account and item codes. "
+              "Leave these blank until they are configured.",wraplength=530).pack(anchor="w",pady=(0,8))
+    field(accounting,"ABD_BLUESEER_USER","BlueSeer user name")
+    field(accounting,"ABD_BLUESEER_PASSWORD","BlueSeer password",secret=True)
+    field(accounting,"ABD_BLUESEER_SITE","BlueSeer business site code")
+    field(accounting,"ABD_BLUESEER_AR_ACCOUNT","Accounts receivable account code")
+    field(accounting,"ABD_BLUESEER_TERMS","Customer payment terms code")
+    field(accounting,"ABD_BLUESEER_LABOR_ITEM","Labor service item code")
+    field(accounting,"ABD_BLUESEER_PARTS_ITEM","Parts service item code")
+    field(accounting,"ABD_BLUESEER_TRAVEL_ITEM","Travel service item (optional)")
+    def check_service():
+        import urllib.error
+        import urllib.request
+        try:
+            with urllib.request.urlopen("http://127.0.0.1:8088/bsapi/authServ",timeout=2):
+                pass
+        except urllib.error.HTTPError as err:
+            if err.code==401:
+                messagebox.showinfo("BlueSeer running","The local BlueSeer API is responding. "
+                                    "The business account and item codes must still be configured.")
+                return
+            messagebox.showerror("BlueSeer response","The API returned HTTP "+str(err.code))
+            return
+        except OSError as err:
+            messagebox.showerror("BlueSeer not running","The local API is not responding:\n"+str(err))
+            return
+        messagebox.showinfo("BlueSeer","The local API responded.")
+    def check_login():
+        user=vars_["ABD_BLUESEER_USER"].get().strip()
+        password=vars_["ABD_BLUESEER_PASSWORD"].get().strip()
+        if not user or not password:
+            messagebox.showinfo("BlueSeer login","Enter a BlueSeer username and password first.")
+            return
+        try:
+            import sys
+            app_dir=APP/"integrations"/"all_by_devoll"
+            if str(app_dir) not in sys.path:sys.path.insert(0,str(app_dir))
+            import blue_bridge
+            client=blue_bridge.BlueSeerClient(
+                base="http://127.0.0.1:8088/bsapi",user=user,password=password)
+            client.authenticate()
+        except Exception as err:
+            messagebox.showerror("BlueSeer login", "Authentication could not be verified: "+str(err)[:250])
+        else:
+            messagebox.showinfo("BlueSeer login","BlueSeer accepted these credentials. "
+                                "Financial transactions still require valid site, accounts and service items.")
+    row=ttk.Frame(accounting)
+    row.pack(anchor="w",pady=10)
+    ttk.Button(row,text="Check local ERP service",command=check_service).pack(side="left",padx=(0,8))
+    ttk.Button(row,text="Test BlueSeer login",command=check_login).pack(side="left")
+    ttk.Label(accounting,text="Invoice posting stays disabled until tested.",wraplength=530).pack(anchor="w")
     def save():
         vals={k:v.get().strip() for k,v in vars_.items()}
         recipient=vals["ABD_OWNER_REPORT_TO"]
         if "@" not in recipient or recipient.count("@")!=1:
-            messagebox.showerror("Email","Enter a valid owner report email.")
+            messagebox.showerror("Email","Enter a valid owner report address.")
+            notebook.select(general)
             return
         vals["ABD_BLUESEER_ENABLE_LIVE_INVOICES"]="no"
         vals["ABD_BIND"]="127.0.0.1"
         vals["ABD_DASHBOARD_PASSWORD"]=""
-        vals["ABD_DB"]=str(DATA / "data" / "tickets.sqlite3")
+        vals["ABD_DB"]=str(DATA/"data"/"tickets.sqlite3")
         vals["ABD_BLUESEER_URL"]="http://127.0.0.1:8088/bsapi"
+        vals["ABD_BLUESEER_CURRENCY"]="USD"
         vals["ABD_REPORT_SMTP_USER"]=vals["ABD_IMAP_USER"] if vals["ABD_IMAP_APP_PASSWORD"] else ""
         try:
             service("disable","--now","all-by-devoll-desk.service")
             prepare_local_data()
             write_env(vals)
             service("daemon-reload")
-            res=service("enable","--now","el-grande-desk.service")
-            if res.returncode:
-                raise RuntimeError(res.stderr.strip() or "Failed to start job desk")
+            desk=service("enable","--now","el-grande-desk.service")
+            if desk.returncode:
+                raise RuntimeError(desk.stderr.strip() or "Could not start the job desk")
+            # Changes to environment variables require a restart of an already running service.
+            desk=service("restart","el-grande-desk.service")
+            if desk.returncode:
+                raise RuntimeError(desk.stderr.strip() or "Could not restart job desk")
             api=service("enable","--now","el-grande-api.service")
             if api.returncode:
-                messagebox.showwarning("Accounting setup", "Job Desk started. BlueSeer API is installed but needs additional configuration.")
-        except (OSError,ValueError,RuntimeError) as exc:
-            messagebox.showerror("Setup failed",str(exc));return
-        messagebox.showinfo("Installed","El Grande is configured. The local dashboard opens without a password.")
+                messagebox.showwarning("Accounting","Shop desk started. BlueSeer API could not start: "+
+                                       (api.stderr.strip()[:220] or "Check the ERP setup."))
+        except (OSError,ValueError,RuntimeError) as err:
+            messagebox.showerror("Setup couldn't finish",str(err))
+            return
         root.destroy()
         webbrowser.open(URL)
-    ttk.Button(frm,text="Save & Open Job Desk",command=save).pack(anchor="e",pady=6)
+    buttons=ttk.Frame(frm)
+    buttons.pack(fill="x",pady=(13,0))
+    ttk.Label(buttons,text="Your shop stays on this computer.").pack(side="left")
+    ttk.Button(buttons,text="Save settings & Open Job Desk",command=save).pack(side="right")
     root.mainloop()
 
 def main():
