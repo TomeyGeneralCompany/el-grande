@@ -69,7 +69,8 @@ def save(payload):
         os.replace(tmp,HOME_CONFIG)
     finally:
         if os.path.exists(tmp):os.unlink(tmp)
-    for key in ("ABD_OWNER_REPORT_TO","ABD_IMAP_USER","ABD_IMAP_APP_PASSWORD","ABD_REPORT_SMTP_USER"):
+    for key in ("ABD_OWNER_REPORT_TO","ABD_IMAP_USER","ABD_IMAP_APP_PASSWORD",
+                "ABD_REPORT_SMTP_USER","ABD_REPORT_SMTP_APP_PASSWORD"):
         os.environ[key]=old.get(key,"")
     return old
 
