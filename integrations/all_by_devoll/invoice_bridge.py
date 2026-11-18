@@ -80,6 +80,9 @@ def post_native_invoice(ticket,math,shipper_id,client=None):
     service=client.get("dataServORD","getServiceOrderMstr",key)
     if not isinstance(service,dict) or service.get("sv_nbr")!=key:
         raise blue_bridge.BridgeError("Create the native BlueSeer service order first")
+    if service.get("sv_cust")!=cust:
+        raise blue_bridge.BridgeError("Native service order customer does not match invoice")
+    blue_bridge.verify_existing_lines(client,"service_order",key,math["basis"],cust)
     payload=prepare_invoice(ticket,math,shipper_id,client)
     existing=client.get("dataServSHP","getShipMstr",str(shipper_id))
     if isinstance(existing,dict) and existing.get("sh_id")==str(shipper_id):
