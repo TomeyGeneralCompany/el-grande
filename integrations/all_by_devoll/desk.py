@@ -322,11 +322,11 @@ def render(rows):
           <p><strong>Reported:</strong> {escape(row["problem"])}</p>
           <p><strong>Received:</strong> {escape(row["received_at"])}</p>
           {editform}
-          <div class="numbers"><span>Calculated customer quote: <b>\${a["total"]:.2f}</b></span>
-            <span>Settlement basis: <b>\${a["basis"]:.2f}</b></span>
-            <span>Tomey General 15%: <b>\${a["parent"]:.2f}</b></span>
-            <span>Operator 85%: <b>\${a["operator"]:.2f}</b></span>
-            <span>Operator after parts acquisition: <b>\${a["after_parts"]:.2f}</b></span></div>
+          <div class="numbers"><span>Calculated customer quote: <b>${a["total"]:.2f}</b></span>
+            <span>Settlement basis: <b>${a["basis"]:.2f}</b></span>
+            <span>Tomey General 15%: <b>${a["parent"]:.2f}</b></span>
+            <span>Operator 85%: <b>${a["operator"]:.2f}</b></span>
+            <span>Operator after parts acquisition: <b>${a["after_parts"]:.2f}</b></span></div>
           {finalform}
           <form method="post" action="/ticket/{key}/suggest"><button type="submit" class="secondary">Generate optional local Qwen diagnostic draft</button></form>
           <pre>{escape(row["ai_notes"]) if row["ai_notes"] else "No AI draft. Pricing requires operator confirmation."}</pre>
