@@ -27,6 +27,7 @@ from pathlib import Path
 
 import parts
 import blue_bridge
+import invoice_bridge
 from urllib.parse import parse_qs, urlsplit
 
 ROOT = Path(__file__).resolve().parent
@@ -122,6 +123,8 @@ def init():
         cols={c[1] for c in con.execute("PRAGMA table_info(tickets)")}
         if "blue_customer" not in cols:
             con.execute("ALTER TABLE tickets ADD COLUMN blue_customer TEXT NOT NULL DEFAULT ''")
+        if "blue_ship_to" not in cols:
+            con.execute("ALTER TABLE tickets ADD COLUMN blue_ship_to TEXT NOT NULL DEFAULT ''")
 
 def cash(value):
     try:
@@ -273,11 +276,12 @@ def update_ticket(ticket_id,data):
             if key in data:
                 cleaned[key]=str(hours(data[key]) if key=="labor_hours" else cash(data[key]))
         if "notes" in data:cleaned["notes"]=str(data["notes"])[:5000]
-        if "blue_customer" in data:
-            customer=str(data["blue_customer"]).strip()
-            if not re.fullmatch(r"[A-Za-z0-9_-]{0,40}",customer):
-                raise ValueError("Invalid BlueSeer customer code")
-            cleaned["blue_customer"]=customer
+        for bluefield in ("blue_customer","blue_ship_to"):
+            if bluefield in data:
+                code=str(data[bluefield]).strip()
+                if not re.fullmatch(r"[A-Za-z0-9_-]{0,40}",code):
+                    raise ValueError("Invalid BlueSeer customer or ship-to code")
+                cleaned[bluefield]=code
         if not cleaned:return
         cleaned["updated_at"]=utc()
         sql="UPDATE tickets SET "+", ".join(k+"=?" for k in cleaned)+" WHERE id=?"
@@ -380,6 +384,43 @@ def blue_sync(ticket_id,kind):
         con.execute("INSERT INTO events(ticket_id,timestamp,event,detail) VALUES(?,?,?,?)",
                     (ticket_id,now,"blueseer_"+kind,json.dumps({"record":key,"result":state})))
 
+def invoice_native(ticket_id):
+    invoice_bridge.require_invoice_permission()
+    with db() as con:
+        row=con.execute("SELECT * FROM tickets WHERE id=?",(ticket_id,)).fetchone()
+        if row is None:raise LookupError("Ticket not found")
+        a=amounts(row)
+        if not a["finalized"]:raise ValueError("Finalize the actual bill before native invoicing")
+        if a["basis"]!=a["total"]:
+            raise ValueError("Final bill differs from the estimate; reconcile and finalize a matching bill before creating a native invoice")
+        if not row["blue_customer"] or not row["blue_ship_to"]:
+            raise ValueError("Set the specific BlueSeer customer and ship-to codes on this ticket before finalization")
+        synced=con.execute("SELECT state FROM blue_sync WHERE ticket_id=? AND kind='service_order'",(ticket_id,)).fetchone()
+        if not synced or synced["state"]!="synced":raise ValueError("Synchronize the native BlueSeer service order first")
+        prior=con.execute("SELECT state,record_number FROM blue_sync WHERE ticket_id=? AND kind='invoice'",(ticket_id,)).fetchone()
+        if prior:
+            if prior["state"]=="posted":return
+            raise ValueError("Previous invoice attempt is not confirmed: reconcile native BlueSeer invoice "+prior["record_number"]+" manually before retrying")
+    client=blue_bridge.BlueSeerClient()
+    native_id=invoice_bridge.reserve_native_shipment_number(client)
+    # Reserve the native number durably before transmitting invoice lines.
+    with db() as con:
+        con.execute("INSERT INTO blue_sync(ticket_id,kind,record_number,state,updated_at,detail) VALUES (?, 'invoice', ?, 'reserved', ?, '')",
+                    (ticket_id,native_id,utc()))
+    try:
+        invoice_bridge.post_native_invoice(row,a,native_id,client)
+    except Exception:
+        with db() as con:
+            con.execute("UPDATE blue_sync SET state='unknown',updated_at=?,detail='Reconcile in BlueSeer before retrying' WHERE ticket_id=? AND kind='invoice'",
+                        (utc(),ticket_id))
+        raise
+    with db() as con:
+        now=utc()
+        con.execute("UPDATE blue_sync SET state='posted',updated_at=?,detail='Native shipper and AR/GL posted' WHERE ticket_id=? AND kind='invoice'",
+                    (now,ticket_id))
+        con.execute("INSERT INTO events(ticket_id,timestamp,event,detail) VALUES(?,?,?,?)",
+                    (ticket_id,now,"blueseer_native_invoice",native_id))
+
 def render(rows, catalog=None):
     catalog=catalog or []
     escape=lambda x:html.escape(str(x or ""),quote=True)
@@ -401,11 +442,12 @@ def render(rows, catalog=None):
             ("parts_charge","Parts charged $"),("parts_cost","Parts acquisition cost $"),
             ("travel_charge","Travel charge $"),("extra_charge","Other charges $")])
         if not row["finalized_at"]:
-            editform=f'<form method="post" action="/ticket/{key}/update"><div class="fields">{editform}</div><label>BlueSeer customer code (if different from configured default)<input name="blue_customer" value="{escape(row["blue_customer"])}"></label><label>Status<select name="status">{opts}</select></label><label>Notes<textarea name="notes">{escape(row["notes"])}</textarea></label><button>Save internal estimate</button></form>'
+            editform=f'<form method="post" action="/ticket/{key}/update"><div class="fields">{editform}</div><label>BlueSeer customer code<input name="blue_customer" value="{escape(row["blue_customer"])}"></label><label>BlueSeer ship-to code<input name="blue_ship_to" value="{escape(row["blue_ship_to"])}"></label><label>Status<select name="status">{opts}</select></label><label>Notes<textarea name="notes">{escape(row["notes"])}</textarea></label><button>Save internal estimate</button></form>'
             finalform=f'<form method="post" action="/ticket/{key}/finalize"><label>Final customer bill $<input type="number" name="final_total" min="0" step=".01" value="{a["total"]:.2f}" required></label><button class="final">Finalize bill (15% / 85%)</button></form>'
         else:
             editform='<p class="locked">Final bill locked.</p>'
-            finalform=('<form method="post" action="/ticket/'+str(key)+'/paid"><button type="submit">Mark bill paid</button></form>' if row["status"]!="paid" else '<p>Operator marked this bill paid.</p>')
+            finalform=('<form method="post" action="/ticket/'+str(key)+'/paid"><button type="submit">Mark bill paid (manual record)</button></form>' if row["status"]!="paid" else '<p>Operator marked this bill paid.</p>')
+            finalform += (f'<form method="post" action="/ticket/{key}/blue-invoice"><button type="submit" class="final">Post finalized invoice through native BlueSeer AR/GL</button></form>' if os.getenv("ABD_BLUESEER_ENABLE_LIVE_INVOICES")=="yes" else '<p>Native invoice posting disabled until BlueSeer production qualification.</p>')
         items.append(f'''<details class="ticket" id="ticket-{key}">
           <summary><strong>ABD-{key:06d}</strong> · {escape(row["customer"])} · {escape(row["service"])} <em>{escape(row["status"])}</em></summary>
           <p><strong>Call:</strong> {escape(row["phone"])} · <strong>Location:</strong> {escape(row["location"])} · <strong>Vehicle/job:</strong> {escape(row["machine"])} · <strong>Mobility:</strong> {escape(row["mobility"])}</p>
@@ -499,7 +541,7 @@ class Handler(BaseHTTPRequestHandler):
                 ident="manual:"+secrets.token_hex(16)
                 ident_id,_=create_ticket(data,ident)
             else:
-                found=re.fullmatch(r"/ticket/(\d+)/(update|finalize|suggest|paid|part|blue-quote|blue-order)",path)
+                found=re.fullmatch(r"/ticket/(\d+)/(update|finalize|suggest|paid|part|blue-quote|blue-order|blue-invoice)",path)
                 if not found:return self.response_text("Not found",404,"text/plain")
                 ident_id=int(found.group(1))
                 action=found.group(2)
@@ -510,6 +552,7 @@ class Handler(BaseHTTPRequestHandler):
                 if action=="part":save_part(ident_id,data.get("supplier",""),data.get("sku",""),data.get("quantity","1"))
                 if action=="blue-quote":blue_sync(ident_id,"quote")
                 if action=="blue-order":blue_sync(ident_id,"service_order")
+                if action=="blue-invoice":invoice_native(ident_id)
             self.send_response(303);self.send_header("Location",f"/#ticket-{ident_id}");self.end_headers()
         except (ValueError,LookupError,KeyError,blue_bridge.BridgeError) as ex:
             self.response_text("Cannot complete operation: "+html.escape(str(ex)),400)
