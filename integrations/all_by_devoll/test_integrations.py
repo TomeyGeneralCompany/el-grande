@@ -109,14 +109,19 @@ class BlueSeerTests(unittest.TestCase):
             self.exists=exists;self.calls=[]
         def get(self,*args):
             self.calls.append(("get",args))
-            return {"quo_nbr":"ABD000007"} if self.exists else None
+            if not self.exists:return None
+            if args[1]=="getQuoteDet":
+                return [{"quod_qty":2,"quod_netprice":85},
+                        {"quod_qty":1,"quod_netprice":140},
+                        {"quod_qty":1,"quod_netprice":40}]
+            return {"quo_nbr":"ABD000007","quo_cust":"TEST_CUST"}
         def post(self,*args):
             self.calls.append(("post",args))
             return ["0","created"]
     with patch.dict(os.environ,{"ABD_BLUESEER_TRAVEL_ITEM":"TRAVEL"}):
         existing=FakeClient(True)
         self.assertEqual(blue_bridge.submit_internal_quote(self.ticket,self.math,existing)[1],"exists")
-        self.assertEqual(len(existing.calls),1)
+        self.assertEqual(len(existing.calls),2)
         new=FakeClient(False)
         self.assertEqual(blue_bridge.submit_internal_quote(self.ticket,self.math,new)[1],"created")
         self.assertEqual([x[0] for x in new.calls],["get","post"])
@@ -185,7 +190,8 @@ class CustomerAndAccountingTests(unittest.TestCase):
     class Client:
         def __init__(self):self.actions=[]
         def get(self,resource,action,ident):
-            if action=="getServiceOrderMstr":return {"sv_nbr":"ABD000007"}
+            if action=="getServiceOrderMstr":return {"sv_nbr":"ABD000007","sv_cust":"ABD000007"}
+            if action=="getServiceOrderDet":return [{"svd_qty":2,"svd_netprice":85},{"svd_qty":1,"svd_netprice":140},{"svd_qty":1,"svd_netprice":40}]
             if action=="getCustMstr":return {"cm_code":"ABD000007","cm_curr":"USD","cm_ar_acct":"1100"}
             if action=="getShipMstr":return {"sh_id":"917"}
             return None
@@ -200,7 +206,8 @@ class CustomerAndAccountingTests(unittest.TestCase):
         def __init__(self):self.calls=[]
         def get(self,resource,action,ident):
             self.calls.append(action)
-            if action=="getServiceOrderMstr":return {"sv_nbr":"ABD000007"}
+            if action=="getServiceOrderMstr":return {"sv_nbr":"ABD000007","sv_cust":"ABD000007"}
+            if action=="getServiceOrderDet":return [{"svd_qty":2,"svd_netprice":85},{"svd_qty":1,"svd_netprice":140},{"svd_qty":1,"svd_netprice":40}]
             if action=="getCustMstr":return {"cm_code":"ABD000007","cm_curr":"USD","cm_ar_acct":"1100"}
             if action=="getShipMstr":return None
         def post(self,resource,action,body):
@@ -212,7 +219,7 @@ class CustomerAndAccountingTests(unittest.TestCase):
     fake=Client()
     with patch.dict(os.environ,{"ABD_BLUESEER_TRAVEL_ITEM":"TRAVEL"}):
         self.assertEqual(invoice_bridge.post_native_invoice(self.ticket,self.math,"917",fake),"917")
-    self.assertEqual(fake.calls,["getServiceOrderMstr","getCustMstr","getShipMstr",
+    self.assertEqual(fake.calls,["getServiceOrderMstr","getServiceOrderDet","getCustMstr","getShipMstr",
                                   "addShipperTransaction","updateShipperSAC","confirmShipperTransaction"])
 
 if __name__=="__main__":unittest.main()
