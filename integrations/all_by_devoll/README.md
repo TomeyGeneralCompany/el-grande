@@ -77,6 +77,8 @@ quoted_bill = quoted_labor + parts_charged + travel_charged + extras
 
 The operator enters verified prices and durations. A separate, optional local Qwen draft offers diagnostic considerations and possible labor-hour ranges but **cannot finalize or set monetary amounts**. Parts acquisition cost is an internal operating cost, not a reduction of Tomey General's share.
 
+After finalization, the operator can mark the invoice as paid. That is a manual operator attestation, not bank verification.
+
 When the operator finalizes the actual customer bill, the desk saves the amount and fixes the settlement:
 
 ```TomeyGeneral = round_to_cents(final_bill * 0.15)
