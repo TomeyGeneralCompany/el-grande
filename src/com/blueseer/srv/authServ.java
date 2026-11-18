@@ -73,17 +73,18 @@ protected void doGet(HttpServletRequest request, HttpServletResponse response)
         String sessionid = request.getHeader("sessionid");
         String ip = request.getRemoteAddr();
         
-        System.out.println("HERE:  " + user + "/" + pass + "/" + sessionid + "/" + ip);
+        // Never print credentials or session identifiers in server logs.
+        System.out.println("BlueSeer API login attempt for account: " + user);
         
         if (sessionid.isBlank()) {  // must be login
             sessionid = Long.toHexString(System.currentTimeMillis());
             
             if (! bsmf.MainFrame.confirmServerLogin(request, sessionid)) {
-                System.out.println("unauthorized...sending '0' " + " for user: " + user + "/" + pass + "/"  + sessionid + "/" + ip);
+                System.out.println("BlueSeer API login rejected for account: " + user);
                 response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                 response.getWriter().print("0");
             } else { 
-                System.out.println("authorized...adding " + user + " with sessionid: " + sessionid + " for ip: " + ip);
+                System.out.println("BlueSeer API login accepted for account: " + user);
                 hmuser.remove(user);                
                 String b64string = Base64.toBase64String(sessionid.getBytes());
                 hmuser.put(user, sessionid + "," + ip); 
