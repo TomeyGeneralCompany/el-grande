@@ -104,7 +104,7 @@ class BlueSeerTests(unittest.TestCase):
     import json
     d=json.loads(detail);m=json.loads(master)
     self.assertEqual(m["sv_cust"],"TEST_CUST")
-    self.assertEqual(m["sv_type"],"quote")
+    self.assertEqual(m["sv_type"],"order")
     self.assertIn("DO NOT SEND",m["sv_rmks"])
     self.assertEqual(len(d),3)
     self.assertEqual(d[0]["svd_item"],"LABOR")
