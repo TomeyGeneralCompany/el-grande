@@ -47,7 +47,7 @@ def line(item,description,unit_price,quantity=1):
 def header_data(ticket,amounts):
     key=f"ABD{int(ticket['id']):06d}"
     today=date.today().isoformat()
-    cust=ticket.get("blue_customer") or os.environ["ABD_BLUESEER_CUSTOMER"]
+    cust=ticket["blue_customer"] if "blue_customer" in ticket.keys() and ticket["blue_customer"] else os.environ["ABD_BLUESEER_CUSTOMER"]
     return key,today,cust,os.environ["ABD_BLUESEER_SITE"]
 
 class BlueSeerClient:
@@ -66,11 +66,6 @@ class BlueSeerClient:
         h={"id":action,"user":self.user,"sessionid":self.session or "","Content-Type":"text/plain"}
         h.update(headers)
         return self.transport(self.base+"/"+path,h,body)
-    def login(self):
-        raw=self.request("authServ","loginAPI",b"",user=self.user,pass_=self.password)
-        # The upstream login API expects a header literally named 'pass'.
-        # Reissue the login below using that header, not pass_.
-        return raw
     def authenticate(self):
         h={"id":"loginAPI","user":self.user,"pass":self.password,"sessionid":"","Content-Type":"text/plain"}
         raw=self.transport(self.base+"/authServ",h,b"").strip()
