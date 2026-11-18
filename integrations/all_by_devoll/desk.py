@@ -28,6 +28,7 @@ from pathlib import Path
 import parts
 import blue_bridge
 import invoice_bridge
+import job_reports
 import customer_bridge
 from urllib.parse import parse_qs, urlsplit
 
@@ -113,7 +114,7 @@ def db():
 
 def init():
     with db() as con:
-        con.executescript(SCHEMA + parts.DDL + """
+        con.executescript(SCHEMA + parts.DDL + job_reports.DDL + """
         CREATE TABLE IF NOT EXISTS blue_sync (
           ticket_id INTEGER NOT NULL, kind TEXT NOT NULL,
           record_number TEXT NOT NULL, state TEXT NOT NULL,
@@ -306,6 +307,30 @@ def finalize_ticket(ticket_id,final_total):
                     (str(final),now,now,ticket_id))
         con.execute("INSERT INTO events(ticket_id,timestamp,event,detail) VALUES(?,?,?,?)",
                     (ticket_id,now,"bill_finalized",str(final)))
+
+def finish_job(ticket_id,data):
+    """Atomic completion, finalized customer bill, and owner-report queue."""
+    record=job_reports.validate(data)
+    final=cash(record["actual_invoice"])
+    with db() as con:
+        row=con.execute("SELECT * FROM tickets WHERE id=?",(ticket_id,)).fetchone()
+        if row is None:raise LookupError("Ticket not found")
+        if row["finalized_at"]:raise ValueError("Job already finalized")
+        job_reports.save_completion(con,ticket_id,record)
+        now=utc()
+        con.execute("UPDATE tickets SET bill_total=?,finalized_at=?,status='completed',updated_at=? WHERE id=?",
+                    (str(final),now,now,ticket_id))
+        con.execute("INSERT INTO events(ticket_id,timestamp,event,detail) VALUES(?,?,?,?)",
+                    (ticket_id,now,"bill_finalized",str(final)))
+        job_reports.queue_report(con,ticket_id)
+
+def report_poller():
+    while True:
+        try:
+            sent=job_reports.process_pending(db,amounts)
+            if sent:log.info("Delivered %d owner completion reports",sent)
+        except Exception:log.exception("Owner report delivery failed")
+        time.sleep(60)
 
 def mark_paid(ticket_id):
     """Operator attestation that a finalized bill has been paid; not a bank transaction."""
@@ -530,17 +555,40 @@ def render(rows, catalog=None):
             ("travel_charge","Travel charge $"),("extra_charge","Other charges $")])
         if not row["finalized_at"]:
             editform=f'<form method="post" action="/ticket/{key}/update"><div class="fields">{editform}</div><label>BlueSeer customer code<input name="blue_customer" value="{escape(row["blue_customer"])}"></label><label>BlueSeer ship-to code<input name="blue_ship_to" value="{escape(row["blue_ship_to"])}"></label><label>Status<select name="status">{opts}</select></label><label>Notes<textarea name="notes">{escape(row["notes"])}</textarea></label><button>Save internal estimate</button></form>'
-            finalform=f'<form method="post" action="/ticket/{key}/finalize"><label>Final customer bill $<input type="number" name="final_total" min="0" step=".01" value="{a["total"]:.2f}" required></label><button class="final">Finalize bill (15% / 85%)</button></form>'
+            finalform=f'''<form method="post" action="/ticket/{key}/complete">
+            <h3>Complete job — actual figures, not estimates</h3>
+            <label>Work performed<textarea name="work_performed" required placeholder="Work actually completed; findings, parts fitted, testing">{escape(row["notes"])}</textarea></label>
+            <div class="fields">
+              <label>Start date and time<input type="datetime-local" name="started_at"></label>
+              <label>Finish date and time<input type="datetime-local" name="finished_at"></label>
+              <label>Actual hours worked<input type="number" name="actual_hours" min="0" max="10000" step=".01" value="{escape(row["labor_hours"])}" required></label>
+              <label>Actual labor cost ($) — operator expense<input type="number" name="actual_labor_cost" min="0" step=".01" value="0" required></label>
+              <label>Actual parts cost ($) — operator expense<input type="number" name="actual_parts_cost" min="0" step=".01" value="{escape(row["parts_cost"])}" required></label>
+              <label>Other actual job expenses ($)<input type="number" name="actual_other_cost" min="0" step=".01" value="0" required></label>
+              <label>ACTUAL final customer invoice ($)<input type="number" name="actual_invoice" min="0" step=".01" value="{a["total"]:.2f}" required></label>
+            </div>
+            <button class="final">Complete job, lock actual bill, queue owner email</button>
+            </form>'''
         else:
             editform='<p class="locked">Final bill locked.</p>'
             finalform=('<form method="post" action="/ticket/'+str(key)+'/paid"><button type="submit">Mark bill paid (manual record)</button></form>' if row["status"]!="paid" else '<p>Operator marked this bill paid.</p>')
             finalform += (f'<form method="post" action="/ticket/{key}/blue-invoice"><button type="submit" class="final">Post finalized invoice through native BlueSeer AR/GL</button></form>' if os.getenv("ABD_BLUESEER_ENABLE_LIVE_INVOICES")=="yes" else '<p>Native invoice posting disabled until BlueSeer production qualification.</p>')
+        with db() as con:
+            completed=con.execute("SELECT * FROM job_completions WHERE ticket_id=?",(key,)).fetchone()
+            ownerstate=con.execute("SELECT state,sent_at,last_error FROM owner_reports WHERE ticket_id=?",(key,)).fetchone()
+        completion_html=""
+        if completed:
+            completion_html=f'<section><h3>Completed job record</h3><p><strong>Work:</strong> {escape(completed["work_performed"])}</p><p>Actual time: {escape(completed["actual_hours"])} hours · Labor expense: ${escape(completed["actual_labor_cost"])} · Parts expense: ${escape(completed["actual_parts_cost"])} · Other expenses: ${escape(completed["actual_other_cost"])}</p><p><strong>Actual invoice: ${escape(completed["actual_invoice"])}</strong> · Owner email: {escape(ownerstate["state"] if ownerstate else "not queued")}</p></section>'
+        lookup=job_reports.google_search_link(row["problem"][:90] or row["service"][:90],row["machine"][:120])
+        search_html=f'<p><a href="{escape(lookup)}" target="_blank" rel="noopener noreferrer">Google: compare market prices for this vehicle / repair</a> — rough reference only, not a verified supplier price.</p>'
+        search_html+=f'<form method="get" action="/"><label>Quick part search (Google)<input name="googlepart" placeholder="Starter, alternator, wheel bearing, etc."></label><input type="hidden" name="vehicle" value="{escape(row["machine"])}"><button>Open Google price search</button></form>'
         items.append(f'''<details class="ticket" id="ticket-{key}">
           <summary><strong>ABD-{key:06d}</strong> · {escape(row["customer"])} · {escape(row["service"])} <em>{escape(row["status"])}</em></summary>
           <p><strong>Call:</strong> {escape(row["phone"])} · <strong>Location:</strong> {escape(row["location"])} · <strong>Vehicle/job:</strong> {escape(row["machine"])} · <strong>Mobility:</strong> {escape(row["mobility"])}</p>
           <p><strong>Reported:</strong> {escape(row["problem"])}</p>
           <p><strong>Received:</strong> {escape(row["received_at"])}</p>
           {editform}
+          {search_html}
           <h4>Supplier-priced parts</h4><ul>{attached_html or "<li>No supplier-confirmed parts selected.</li>"}</ul>{selected_supplier}
           <h4>BlueSeer native records</h4><p>{sync_html or "Not synchronized."}</p>{blue_actions}
           <div class="numbers"><span>Calculated customer quote: <b>${a["total"]:.2f}</b></span>
@@ -549,6 +597,7 @@ def render(rows, catalog=None):
             <span>Operator 85%: <b>${a["operator"]:.2f}</b></span>
             <span>Operator after parts acquisition: <b>${a["after_parts"]:.2f}</b></span></div>
           {finalform}
+          {completion_html}
           {f'<form method="post" action="/ticket/{key}/suggest"><button type="submit" class="secondary">Generate optional internal Qwen diagnostic notes</button></form>' if not row["finalized_at"] else ''}
           <pre>{escape(row["ai_notes"]) if row["ai_notes"] else "No AI draft. Pricing requires operator confirmation."}</pre>
         </details>''')
@@ -585,6 +634,11 @@ class Handler(BaseHTTPRequestHandler):
         if not self.auth():return
         path=urlsplit(self.path).path
         if path=="/":
+            searchparams=parse_qs(urlsplit(self.path).query)
+            if searchparams.get("googlepart",[""])[0].strip():
+                lookup=job_reports.google_search_link(searchparams["googlepart"][0],
+                      searchparams.get("vehicle",[""])[0])
+                self.send_response(303);self.send_header("Location",lookup);self.end_headers();return
             with db() as con:
                 rows=con.execute("SELECT * FROM tickets ORDER BY id DESC LIMIT 500").fetchall()
                 partq=parse_qs(urlsplit(self.path).query).get("partq",[""])[0].strip()
@@ -629,12 +683,13 @@ class Handler(BaseHTTPRequestHandler):
                 ident="manual:"+secrets.token_hex(16)
                 ident_id,_=create_ticket(data,ident)
             else:
-                found=re.fullmatch(r"/ticket/(\d+)/(update|finalize|suggest|paid|part|blue-customer|blue-quote|blue-order|blue-invoice)",path)
+                found=re.fullmatch(r"/ticket/(\d+)/(update|finalize|complete|suggest|paid|part|blue-customer|blue-quote|blue-order|blue-invoice)",path)
                 if not found:return self.response_text("Not found",404,"text/plain")
                 ident_id=int(found.group(1))
                 action=found.group(2)
                 if action=="update":update_ticket(ident_id,data)
                 if action=="finalize":finalize_ticket(ident_id,data.get("final_total",""))
+                if action=="complete":finish_job(ident_id,data)
                 if action=="suggest":suggest(ident_id)
                 if action=="paid":mark_paid(ident_id)
                 if action=="part":save_part(ident_id,data.get("supplier",""),data.get("sku",""),data.get("quantity","1"))
@@ -657,6 +712,9 @@ def main():
     if not PASSWORD:raise SystemExit("Set a strong ABD_DASHBOARD_PASSWORD before launch.")
     if IMAP_USER and IMAP_PASSWORD:
         threading.Thread(target=poller,daemon=True).start()
+    if os.getenv("ABD_OWNER_REPORT_TO"):
+        threading.Thread(target=report_poller,daemon=True).start()
+    else:log.warning("Owner completion reports disabled; configure ABD_OWNER_REPORT_TO")
     if any(os.getenv(p+"_URL") for p in ("ABD_DETROIT_AXLE","ABD_AUTOZONE","ABD_PARTS_FEED")):
         threading.Thread(target=parts_poller,daemon=True).start()
     else:log.warning("Mailbox importer disabled; configure ABD_IMAP_USER and ABD_IMAP_APP_PASSWORD")
