@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=El Grande — All by Devoll
+Comment=Internal repair tickets, estimates and job reports
+Exec=/usr/bin/python3 /opt/el-grande/packaging/el-grande-launcher.py
+Icon=applications-office
+Terminal=false
+Categories=Office;Finance;
+StartupNotify=true

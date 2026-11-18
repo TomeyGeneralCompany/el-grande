@@ -1,0 +1,49 @@
+name: El Grande Zorin installer
+on:
+  push:
+    paths:
+      - 'packaging/**'
+      - 'integrations/all_by_devoll/**'
+      - 'src/**'
+      - '.github/workflows/el-grande-installer.yml'
+  pull_request:
+    paths:
+      - 'packaging/**'
+      - 'integrations/all_by_devoll/**'
+      - 'src/**'
+      - '.github/workflows/el-grande-installer.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build-deb:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile and test Python
+        run: |
+          python3 -m compileall -q integrations/all_by_devoll packaging
+          python3 -m unittest discover -s integrations/all_by_devoll -p 'test_*.py' -v
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Build full BlueSeer Java classes
+        run: bash packaging/build-java.sh
+      - name: Smoke-test bundled local BlueSeer API
+        run: bash packaging/smoke-java-api.sh
+      - name: Package and inspect .deb
+        run: |
+          bash packaging/build-deb.sh 0.1.0
+          dpkg-deb -I artifacts/el-grande_0.1.0_all.deb
+          dpkg-deb -c artifacts/el-grande_0.1.0_all.deb | grep -E 'el-grande-launcher.py|desk.py|apiServer.class|el-grande.desktop|blueseer.sqlite' | head -20
+      - name: Upload double-click installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: el-grande-zorin-deb
+          path: artifacts/el-grande_0.1.0_all.deb
+          retention-days: 14

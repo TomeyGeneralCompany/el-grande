@@ -614,14 +614,21 @@ def render(rows, catalog=None):
 <h2>Ticket log</h2>''' + "".join(items) + '''</main><footer>INTERNAL ESTIMATE ONLY — mechanic reviews and phones customer with any proposed price. Never sent or offered automatically. Supplier prices require verified vendor feed. 15% applies to finalized bill before expenses.</footer></body></html>'''
 
 class Handler(BaseHTTPRequestHandler):
-    def headers(self,code=200,typ="text/html; charset=utf-8"):
+    def response_headers(self,code=200,typ="text/html; charset=utf-8"):
         self.send_response(code);self.send_header("Content-Type",typ)
         self.send_header("Cache-Control","no-store");self.send_header("X-Content-Type-Options","nosniff")
         self.send_header("Content-Security-Policy","default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
         self.send_header("X-Frame-Options","DENY");self.end_headers()
     def auth(self):
+        # A single-machine installation should open on localhost without a login.
+        # Explicit remote binding still requires an operator password.
+        hostname=(self.headers.get("Host","").split(":",1)[0] or "").lower()
         if not PASSWORD:
-            self.headers(503,"text/plain");self.wfile.write(b"Set ABD_DASHBOARD_PASSWORD before starting the desk.");return False
+            if hostname not in ("127.0.0.1","localhost","[::1]"):
+                self.response_headers(403,"text/plain")
+                self.wfile.write(b"Local-only dashboard. Open http://127.0.0.1:8765 on this computer.")
+                return False
+            return True
         value=self.headers.get("Authorization","")
         expected="Basic "+base64.b64encode(("operator:"+PASSWORD).encode()).decode()
         if not secrets.compare_digest(value,expected):
@@ -629,7 +636,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Cache-Control","no-store");self.end_headers();return False
         return True
     def response_text(self,content,code=200,typ="text/html; charset=utf-8"):
-        self.headers(code,typ);self.wfile.write(content.encode("utf-8"))
+        self.response_headers(code,typ);self.wfile.write(content.encode("utf-8"))
     def do_GET(self):
         if not self.auth():return
         path=urlsplit(self.path).path
@@ -709,7 +716,10 @@ def main():
     init()
     if BIND not in ("127.0.0.1","::1","localhost") and os.getenv("ABD_ALLOW_REMOTE")!="yes":
         raise SystemExit("Refusing remote bind; use a TLS/authenticated reverse proxy and ABD_ALLOW_REMOTE=yes")
-    if not PASSWORD:raise SystemExit("Set a strong ABD_DASHBOARD_PASSWORD before launch.")
+    if BIND not in ("127.0.0.1","::1","localhost") and not PASSWORD:
+        raise SystemExit("Remote dashboard access requires ABD_DASHBOARD_PASSWORD.")
+    if not PASSWORD:
+        log.info("Local-only mode: no dashboard password required; browser access restricted to localhost.")
     if IMAP_USER and IMAP_PASSWORD:
         threading.Thread(target=poller,daemon=True).start()
     if os.getenv("ABD_OWNER_REPORT_TO"):

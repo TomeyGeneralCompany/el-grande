@@ -1,0 +1,20 @@
+[Unit]
+Description=El Grande — All by Devoll Job Desk
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/.local/share/el-grande
+EnvironmentFile=%h/.config/el-grande/desk.env
+ExecStart=/usr/bin/python3 /opt/el-grande/integrations/all_by_devoll/desk.py
+Restart=on-failure
+RestartSec=10
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=%h/.local/share/el-grande %h/.config/el-grande
+
+[Install]
+WantedBy=default.target
