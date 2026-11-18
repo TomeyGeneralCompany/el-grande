@@ -14,7 +14,7 @@ from decimal import Decimal
 from urllib.parse import urlparse
 
 REQUIRED = ("ABD_BLUESEER_URL","ABD_BLUESEER_USER","ABD_BLUESEER_PASSWORD",
-            "ABD_BLUESEER_SITE","ABD_BLUESEER_CUSTOMER",
+            "ABD_BLUESEER_SITE",
             "ABD_BLUESEER_LABOR_ITEM","ABD_BLUESEER_PARTS_ITEM")
 class BridgeError(Exception):pass
 
@@ -47,7 +47,8 @@ def line(item,description,unit_price,quantity=1):
 def header_data(ticket,amounts):
     key=f"ABD{int(ticket['id']):06d}"
     today=date.today().isoformat()
-    cust=ticket["blue_customer"] if "blue_customer" in ticket.keys() and ticket["blue_customer"] else os.environ["ABD_BLUESEER_CUSTOMER"]
+    cust=ticket["blue_customer"] if "blue_customer" in ticket.keys() and ticket["blue_customer"] else os.getenv("ABD_BLUESEER_CUSTOMER","")
+    if not cust:raise BridgeError("Assign or create a BlueSeer customer before synchronization")
     return key,today,cust,os.environ["ABD_BLUESEER_SITE"]
 
 class BlueSeerClient:
