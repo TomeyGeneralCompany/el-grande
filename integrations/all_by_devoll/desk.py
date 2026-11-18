@@ -279,6 +279,17 @@ def finalize_ticket(ticket_id,final_total):
         con.execute("INSERT INTO events(ticket_id,timestamp,event,detail) VALUES(?,?,?,?)",
                     (ticket_id,now,"bill_finalized",str(final)))
 
+def mark_paid(ticket_id):
+    """Operator attestation that a finalized bill has been paid; not a bank transaction."""
+    with db() as con:
+        row=con.execute("SELECT status,finalized_at FROM tickets WHERE id=?",(ticket_id,)).fetchone()
+        if not row:raise LookupError("Ticket not found")
+        if not row["finalized_at"]:raise ValueError("Bill must be finalized first")
+        if row["status"]=="paid":return
+        now=utc()
+        con.execute("UPDATE tickets SET status='paid',updated_at=? WHERE id=?",(now,ticket_id))
+        con.execute("INSERT INTO events(ticket_id,timestamp,event,detail) VALUES(?,?,'marked_paid',?)",(ticket_id,now,"Operator-recorded paid status; no external bank verification"))
+
 def suggest(ticket_id):
     with db() as con:
         row=con.execute("SELECT * FROM tickets WHERE id=?",(ticket_id,)).fetchone()
@@ -315,7 +326,7 @@ def render(rows):
             finalform=f'<form method="post" action="/ticket/{key}/finalize"><label>Final customer bill $<input type="number" name="final_total" min="0" step=".01" value="{a["total"]:.2f}" required></label><button class="final">Finalize bill (15% / 85%)</button></form>'
         else:
             editform='<p class="locked">Final bill locked.</p>'
-            finalform=""
+            finalform=('<form method="post" action="/ticket/'+str(key)+'/paid"><button type="submit">Mark bill paid</button></form>' if row["status"]!="paid" else '<p>Operator marked this bill paid.</p>')
         items.append(f'''<details class="ticket" id="ticket-{key}">
           <summary><strong>ABD-{key:06d}</strong> · {escape(row["customer"])} · {escape(row["service"])} <em>{escape(row["status"])}</em></summary>
           <p><strong>Call:</strong> {escape(row["phone"])} · <strong>Location:</strong> {escape(row["location"])} · <strong>Vehicle/job:</strong> {escape(row["machine"])} · <strong>Mobility:</strong> {escape(row["mobility"])}</p>
@@ -395,13 +406,14 @@ class Handler(BaseHTTPRequestHandler):
                 ident="manual:"+secrets.token_hex(16)
                 ident_id,_=create_ticket(data,ident)
             else:
-                found=re.fullmatch(r"/ticket/(\d+)/(update|finalize|suggest)",path)
+                found=re.fullmatch(r"/ticket/(\d+)/(update|finalize|suggest|paid)",path)
                 if not found:return self.response_text("Not found",404,"text/plain")
                 ident_id=int(found.group(1))
                 action=found.group(2)
                 if action=="update":update_ticket(ident_id,data)
                 if action=="finalize":finalize_ticket(ident_id,data.get("final_total",""))
                 if action=="suggest":suggest(ident_id)
+                if action=="paid":mark_paid(ident_id)
             self.send_response(303);self.send_header("Location",f"/#ticket-{ident_id}");self.end_headers()
         except (ValueError,LookupError,KeyError) as ex:
             self.response_text("Cannot complete operation: "+html.escape(str(ex)),400)
