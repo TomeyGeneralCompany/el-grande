@@ -25,7 +25,7 @@ CONFIG={
  "ABD_BLUESEER_CUSTOMER":"TEST_CUST",
  "ABD_BLUESEER_LABOR_ITEM":"LABOR",
  "ABD_BLUESEER_PARTS_ITEM":"PARTS",
- "ABD_BLUESEER_SERVICE_TYPE":"quote",
+ "ABD_BLUESEER_SERVICE_TYPE":"order",
 }
 CSV="""supplier,sku,description,unit_cost,suggested_sale,currency,availability,checked_at,supplier_url
 DemoSupplier,ST-123,Starter assembly,110.00,140.00,USD,in_stock,2026-11-18T12:00:00Z,https://supplier.example/parts/ST-123
@@ -104,7 +104,7 @@ class BlueSeerTests(unittest.TestCase):
     import json
     d=json.loads(detail);m=json.loads(master)
     self.assertEqual(m["sv_cust"],"TEST_CUST")
-    self.assertEqual(m["sv_type"],"quote")
+    self.assertEqual(m["sv_type"],"order")
     self.assertIn("DO NOT SEND",m["sv_rmks"])
     self.assertEqual(len(d),3)
     self.assertEqual(d[0]["svd_item"],"LABOR")

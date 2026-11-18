@@ -148,7 +148,7 @@ The bridge calls the existing /bsapi/authServ, dataServCUS, dataServORD, dataSer
     ABD_BLUESEER_PARTS_ITEM=YOUR_PARTS_ITEM
     ABD_BLUESEER_TRAVEL_ITEM=YOUR_TRAVEL_ITEM
     ABD_BLUESEER_MISC_ITEM=YOUR_MISC_ITEM
-    ABD_BLUESEER_SERVICE_TYPE=quote
+    ABD_BLUESEER_SERVICE_TYPE=order
     ABD_BLUESEER_ENABLE_LIVE_INVOICES=no
 
 Use actual configured BlueSeer codes. For an API on a remote host, the adapter requires HTTPS; loopback HTTP alone is allowed.

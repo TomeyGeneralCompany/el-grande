@@ -134,7 +134,7 @@ def build_payloads(ticket,math):
     remarks=(f"INTERNAL ESTIMATE ONLY - DO NOT SEND. {key}. "
              f"{ticket['machine']}. {ticket['problem']}")[:255]
     currency=os.getenv("ABD_BLUESEER_CURRENCY","USD")
-    service_type=os.getenv("ABD_BLUESEER_SERVICE_TYPE","quote")
+    service_type=os.getenv("ABD_BLUESEER_SERVICE_TYPE","order")
     lines=sales_lines(ticket,math)
     sv=record(SV_FIELDS,sv_nbr=key,sv_cust=cust,sv_ship=cust,
               sv_create_date=today,sv_due_date=today,sv_rmks=remarks,
