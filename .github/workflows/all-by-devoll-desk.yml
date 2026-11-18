@@ -1,0 +1,25 @@
+name: All by Devoll job desk tests
+on:
+  push:
+    paths:
+      - 'integrations/all_by_devoll/**'
+      - '.github/workflows/all-by-devoll-desk.yml'
+  pull_request:
+    paths:
+      - 'integrations/all_by_devoll/**'
+      - '.github/workflows/all-by-devoll-desk.yml'
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.10','3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: python -m py_compile integrations/all_by_devoll/desk.py
+      - run: python -m unittest discover -s integrations/all_by_devoll -p 'test_*.py' -v
