@@ -144,6 +144,7 @@ def build_payloads(ticket,math):
         svd.append(record(SVD_FIELDS,svd_nbr=key,svd_line=i,svd_uom="EA",svd_item=item,
             svd_desc=desc,svd_type=service_type,svd_qty=qty,
             svd_ord_date=today,svd_due_date=today,svd_create_date=today,
+            svd_completed_hrs=0.0,svd_disc=0.0,svd_taxamt=0.0,
             svd_status="open",svd_listprice=price,svd_netprice=price,svd_site=site))
     q=record(QUO_FIELDS,quo_nbr=key,quo_cust=cust,quo_site=site,
              quo_date=today,quo_expire=(date.today()+timedelta(days=30)).isoformat(),
