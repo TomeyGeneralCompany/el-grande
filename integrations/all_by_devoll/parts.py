@@ -95,18 +95,18 @@ def upsert_catalogue(con,rows,source):
                 checked_at=excluded.checked_at,supplier_url=excluded.supplier_url,source=excluded.source""",p)
     return len(records)
 
-def supplier_feed():
-    """Ingest a supplier-authorized HTTPS endpoint, never third-party HTML scraping."""
-    url=os.getenv("ABD_PARTS_FEED_URL","").strip()
+def supplier_feed(prefix="ABD_PARTS_FEED"):
+    """One explicitly authorized supplier feed, not HTML scraping."""
+    url=os.getenv(prefix+"_URL","").strip()
     if not url:return None
     parsed=urlparse(url)
     if parsed.scheme!="https" or not parsed.hostname or parsed.username or parsed.password:
         raise ValueError("Supplier feed must be a credential-free HTTPS URL")
-    allowed=os.getenv("ABD_PARTS_FEED_HOST","").strip().lower()
+    allowed=os.getenv(prefix+"_HOST","").strip().lower()
     if not allowed or parsed.hostname.lower()!=allowed:
-        raise ValueError("Set ABD_PARTS_FEED_HOST to the authorized supplier hostname")
+        raise ValueError("Set "+prefix+"_HOST to the approved supplier hostname")
     headers={"Accept":"application/json,text/csv","User-Agent":"AllByDevoll-AuthorizedPartsFeed/1.0"}
-    token=os.getenv("ABD_PARTS_FEED_TOKEN","").strip()
+    token=os.getenv(prefix+"_TOKEN","").strip()
     if token:headers["Authorization"]="Bearer "+token
     request=urllib.request.Request(url,headers=headers)
     class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -117,13 +117,32 @@ def supplier_feed():
         raw=res.read(MAX_BYTES+1)
         if len(raw)>MAX_BYTES:raise ValueError("Supplier response too large")
         content=raw.decode("utf-8-sig")
-        if "json" in res.headers.get("Content-Type","") or content.lstrip().startswith("["):
+        if "json" in res.headers.get("Content-Type","") or content.lstrip().startswith("[") or content.lstrip().startswith("{"):
             rows=json.loads(content)
             if isinstance(rows,dict):rows=rows.get("parts")
             if not isinstance(rows,list):raise ValueError("Supplier JSON must contain a list of parts")
             if len(rows)>MAX_ROWS:raise ValueError("Too many supplier items")
         else:rows=csv_records(content)
+        supplier=os.getenv(prefix+"_SUPPLIER","").strip()
+        if supplier:
+            # An authorized feed may omit a supplier column; never silently misattribute
+            # records that explicitly claim to belong to somebody else.
+            normalized=[]
+            for item in rows:
+                if not isinstance(item,dict):raise ValueError("Invalid supplier part")
+                if item.get("supplier") and item["supplier"]!=supplier:
+                    raise ValueError("Feed supplier does not match configured provider")
+                normalized.append({**item,"supplier":supplier})
+            rows=normalized
         return rows,url
+
+def supplier_feeds():
+    """Fetch all configured providers without one supplier replacing another."""
+    results=[]
+    for prefix in ("ABD_DETROIT_AXLE","ABD_AUTOZONE","ABD_PARTS_FEED"):
+        result=supplier_feed(prefix)
+        if result:results.append(result)
+    return results
 
 def search(con,text,limit=50):
     q="%"+text.strip().replace("%","\\%").replace("_","\\_")+"%"

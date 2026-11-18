@@ -82,6 +82,51 @@ class SupplierTests(unittest.TestCase):
     self.assertIn("INTERNAL PRELIMINARY",row["ai_notes"])
     self.assertIn("DemoSupplier / ST-123",row["ai_notes"])
     self.assertEqual(row["parts_cost"],"0")
+ def test_distinct_authorized_supplier_feeds(self):
+    import io,json
+    class Response(io.BytesIO):
+        @property
+        def headers(self):return {"Content-Type":"application/json"}
+        def __enter__(self):return self
+        def __exit__(self,*args):self.close()
+    with patch.dict(os.environ,{
+        "ABD_DETROIT_AXLE_URL":"https://supplier-detroit.example/feed",
+        "ABD_DETROIT_AXLE_HOST":"supplier-detroit.example",
+        "ABD_DETROIT_AXLE_SUPPLIER":"Detroit Axle",
+        "ABD_AUTOZONE_URL":"https://supplier-autozone.example/feed",
+        "ABD_AUTOZONE_HOST":"supplier-autozone.example",
+        "ABD_AUTOZONE_SUPPLIER":"AutoZone",
+        "ABD_PARTS_FEED_URL":""}):
+        def fake_open(request,timeout):
+            supplier="Detroit Axle" if "detroit" in request.full_url else "AutoZone"
+            return Response(json.dumps([{"sku":"S-1","description":"Test starter",
+                                         "unit_cost":"100.00","currency":"USD",
+                                         "availability":"in_stock",
+                                         "checked_at":"2026-11-18T15:00:00Z"}]).encode())
+        with patch("parts.urllib.request.build_opener") as opener:
+            opener.return_value.open.side_effect=fake_open
+            feed=parts.supplier_feeds()
+        self.assertEqual(len(feed),2)
+        with app.db() as con:
+            for records,url in feed:parts.upsert_catalogue(con,records,url)
+            stored=con.execute("SELECT supplier FROM supplier_parts ORDER BY supplier").fetchall()
+        self.assertEqual([x[0] for x in stored],["AutoZone","Detroit Axle"])
+ def test_rejects_supplier_spoofing(self):
+    import io,json
+    class Response(io.BytesIO):
+        @property
+        def headers(self):return {"Content-Type":"application/json"}
+        def __enter__(self):return self
+        def __exit__(self,*args):self.close()
+    with patch.dict(os.environ,{
+        "ABD_DETROIT_AXLE_URL":"https://supplier-detroit.example/feed",
+        "ABD_DETROIT_AXLE_HOST":"supplier-detroit.example",
+        "ABD_DETROIT_AXLE_SUPPLIER":"Detroit Axle"}):
+        with patch("parts.urllib.request.build_opener") as opener:
+            opener.return_value.open.return_value=Response(json.dumps([
+                {"supplier":"AutoZone","sku":"X","description":"Other","unit_cost":"10.00"}
+            ]).encode())
+            with self.assertRaises(ValueError):parts.supplier_feed("ABD_DETROIT_AXLE")
  def test_supplier_feed_rejects_unauthorized_origin(self):
     with patch.dict(os.environ,{"ABD_PARTS_FEED_URL":"http://evil.example/prices","ABD_PARTS_FEED_HOST":"evil.example"}):
         with self.assertRaises(ValueError):parts.supplier_feed()

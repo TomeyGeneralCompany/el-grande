@@ -411,11 +411,10 @@ def import_parts(content,source):
     with db() as con:return parts.upsert_catalogue(con,parts.csv_records(content),source)
 
 def update_feed():
-    feed=parts.supplier_feed()
-    if feed:
-        records,url=feed
-        with db() as con:return parts.upsert_catalogue(con,records,url)
-    return 0
+    count=0
+    for records,url in parts.supplier_feeds():
+        with db() as con:count+=parts.upsert_catalogue(con,records,url)
+    return count
 
 def parts_poller():
     while True:
@@ -562,7 +561,7 @@ def render(rows, catalog=None):
 <div class="panel" id="parts"><h2>Supplier parts catalogue — internal pricing only</h2><p>Paste a CSV provided by your supplier (supplier,sku,description,unit_cost, optional suggested_sale, currency, availability, checked_at, supplier_url). No invented prices or automatic customer quotes.</p>
 <form method="post" action="/parts/import"><label>Supplier CSV<textarea name="catalog" rows="6"></textarea></label><button type="submit">Import verified supplier data</button></form>
 <form method="post" action="/parts/fetch"><button class="secondary">Refresh authorized supplier feed</button></form>
-<h3>Available supplier prices</h3><form method="get" action="/"><label>Search supplier, SKU, description<input name="partq" placeholder="e.g. starter"></label><button>Search parts</button></form><ul>''' + "".join(f'<li><b>{escape(x["supplier"])} / {escape(x["sku"])}</b> — {escape(x["description"])} · cost ${escape(x["unit_cost"])} · suggested sale {escape(x["suggested_sale"]) or "not supplied"} · {escape(x["availability"])} · checked {escape(x["checked_at"])}</li>' for x in catalog) + '''</ul></div>
+<p>Preferred suppliers: <a href="https://detroitaxle.com/parts" target="_blank" rel="noopener noreferrer">Detroit Axle parts catalogue</a> · <a href="https://www.autozonepro.com/" target="_blank" rel="noopener noreferrer">AutoZonePro commercial catalogue</a>. These are operator lookup links, not automatic price feeds. Use verified supplier exports or authorized feeds for automatic prices.</p><h3>Available supplier prices</h3><form method="get" action="/"><label>Search supplier, SKU, description<input name="partq" placeholder="e.g. starter"></label><button>Search parts</button></form><ul>''' + "".join(f'<li><b>{escape(x["supplier"])} / {escape(x["sku"])}</b> — {escape(x["description"])} · cost ${escape(x["unit_cost"])} · suggested sale {escape(x["suggested_sale"]) or "not supplied"} · {escape(x["availability"])} · checked {escape(x["checked_at"])}</li>' for x in catalog) + '''</ul></div>
 <h2>Ticket log</h2>''' + "".join(items) + '''</main><footer>INTERNAL ESTIMATE ONLY — mechanic reviews and phones customer with any proposed price. Never sent or offered automatically. Supplier prices require verified vendor feed. 15% applies to finalized bill before expenses.</footer></body></html>'''
 
 class Handler(BaseHTTPRequestHandler):
@@ -658,7 +657,7 @@ def main():
     if not PASSWORD:raise SystemExit("Set a strong ABD_DASHBOARD_PASSWORD before launch.")
     if IMAP_USER and IMAP_PASSWORD:
         threading.Thread(target=poller,daemon=True).start()
-    if os.getenv("ABD_PARTS_FEED_URL"):
+    if any(os.getenv(p+"_URL") for p in ("ABD_DETROIT_AXLE","ABD_AUTOZONE","ABD_PARTS_FEED")):
         threading.Thread(target=parts_poller,daemon=True).start()
     else:log.warning("Mailbox importer disabled; configure ABD_IMAP_USER and ABD_IMAP_APP_PASSWORD")
     server=ThreadingHTTPServer((BIND,PORT),Handler)
