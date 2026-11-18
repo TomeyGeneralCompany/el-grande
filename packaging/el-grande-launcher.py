@@ -4,6 +4,8 @@ import os
 from pathlib import Path
 import secrets
 import subprocess
+import sqlite3
+import shutil
 import sys
 import tkinter as tk
 from tkinter import messagebox, ttk
@@ -37,6 +39,34 @@ def write_env(values):
 
 def service(*args):
     return subprocess.run(["systemctl","--user",*args],capture_output=True,text=True,timeout=20)
+
+def prepare_local_data():
+    DATA.mkdir(parents=True,exist_ok=True)
+    DATA.chmod(0o700)
+    (DATA / "data").mkdir(exist_ok=True)
+    (DATA / "data").chmod(0o700)
+    local_db=DATA / "data" / "tickets.sqlite3"
+    if not local_db.exists():
+        # Migrate any tickets from the earlier developer checkout.
+        old=Path.home() / "Applications" / "el-grande" / "integrations" / "all_by_devoll" / "data" / "tickets.sqlite3"
+        if old.exists():
+            with sqlite3.connect(old) as source, sqlite3.connect(local_db) as dest:
+                source.backup(dest)
+    java_data=DATA / "blueseer"
+    java_data.mkdir(exist_ok=True)
+    java_data.chmod(0o700)
+    db_target=java_data / "data"
+    template=APP / "java" / "data-template"
+    if not db_target.exists() and template.is_dir():
+        shutil.copytree(template,db_target)
+    cfg=java_data / "bs.cfg"
+    if not cfg.exists():
+        cfg.write_text(
+            "DBTYPE=sqlite\nDB=data/en/bsdb.db\nUSER=bs_user\n"
+            "PASS=bspasswd\nIP=localhost\nPORT=3306\n"
+            "DRIVER=org.sqlite.JDBC\nLANGUAGE=en\nCOUNTRY=US\n"
+        )
+        cfg.chmod(0o600)
 
 def try_dashboard():
     try:
@@ -90,15 +120,20 @@ def configure():
         vals["ABD_BLUESEER_ENABLE_LIVE_INVOICES"]="no"
         vals["ABD_BIND"]="127.0.0.1"
         vals["ABD_DASHBOARD_PASSWORD"]=""
+        vals["ABD_DB"]=str(DATA / "data" / "tickets.sqlite3")
+        vals["ABD_BLUESEER_URL"]="http://127.0.0.1:8088/bsapi"
         vals["ABD_REPORT_SMTP_USER"]=vals["ABD_IMAP_USER"] if vals["ABD_IMAP_APP_PASSWORD"] else ""
         try:
+            service("disable","--now","all-by-devoll-desk.service")
+            prepare_local_data()
             write_env(vals)
-            DATA.mkdir(parents=True,exist_ok=True)
-            DATA.chmod(0o700)
             service("daemon-reload")
             res=service("enable","--now","el-grande-desk.service")
             if res.returncode:
                 raise RuntimeError(res.stderr.strip() or "Failed to start job desk")
+            api=service("enable","--now","el-grande-api.service")
+            if api.returncode:
+                messagebox.showwarning("Accounting setup", "Job Desk started. BlueSeer API is installed but needs additional configuration.")
         except (OSError,ValueError,RuntimeError) as exc:
             messagebox.showerror("Setup failed",str(exc));return
         messagebox.showinfo("Installed","El Grande is configured. The local dashboard opens without a password.")
