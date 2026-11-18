@@ -24,6 +24,13 @@ class OfficeSettingsTests(unittest.TestCase):
         self.assertEqual(d["ABD_IMAP_APP_PASSWORD"],"oldvalue")
         self.assertEqual(office_settings.HOME_CONFIG.stat().st_mode & 0o777,0o600)
         self.assertIn("ABD_BLUESEER_SITE=1000",office_settings.HOME_CONFIG.read_text())
+    def test_updated_gmail_secret_applies_to_outbound_immediately(self):
+        with patch.dict(os.environ,{"ABD_REPORT_SMTP_APP_PASSWORD":"oldpassword"},clear=False):
+            office_settings.save({"ABD_OWNER_REPORT_TO":"isaiztomey7@gmail.com",
+                 "ABD_IMAP_USER":"allbydevoll@gmail.com",
+                 "ABD_IMAP_APP_PASSWORD":"newpassword"})
+            self.assertEqual(os.environ["ABD_REPORT_SMTP_APP_PASSWORD"],"newpassword")
+            self.assertEqual(os.environ["ABD_IMAP_APP_PASSWORD"],"newpassword")
     def test_email_credentials_do_not_echo_in_settings_html(self):
         rendered=office_settings.page({"ABD_OWNER_REPORT_TO":"isaiztomey7@gmail.com",
             "ABD_IMAP_USER":"allbydevoll@gmail.com",
