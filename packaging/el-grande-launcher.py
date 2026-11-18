@@ -96,8 +96,8 @@ def configure():
     env=read_env()
     root=tk.Tk()
     root.title("El Grande — Office Setup")
-    root.geometry("630x610")
-    root.minsize(570,560)
+    root.geometry("630x540")
+    root.minsize(570,530)
     frm=ttk.Frame(root,padding=20)
     frm.pack(fill="both",expand=True)
     ttk.Label(frm,text="EL GRANDE",font=("Sans",20,"bold")).pack(anchor="w")
@@ -106,8 +106,10 @@ def configure():
     notebook.pack(fill="both",expand=True)
     general=ttk.Frame(notebook,padding=15)
     accounting=ttk.Frame(notebook,padding=15)
+    codes=ttk.Frame(notebook,padding=15)
     notebook.add(general,text="Office & Email")
-    notebook.add(accounting,text="BlueSeer Accounting")
+    notebook.add(accounting,text="ERP Connection")
+    notebook.add(codes,text="Accounting Codes")
     vars_={}
     def field(parent,key,title,default="",secret=False):
         ttk.Label(parent,text=title).pack(anchor="w",pady=(7,2))
@@ -126,12 +128,15 @@ def configure():
               "Leave these blank until they are configured.",wraplength=530).pack(anchor="w",pady=(0,8))
     field(accounting,"ABD_BLUESEER_USER","BlueSeer user name")
     field(accounting,"ABD_BLUESEER_PASSWORD","BlueSeer password",secret=True)
-    field(accounting,"ABD_BLUESEER_SITE","BlueSeer business site code")
-    field(accounting,"ABD_BLUESEER_AR_ACCOUNT","Accounts receivable account code")
-    field(accounting,"ABD_BLUESEER_TERMS","Customer payment terms code")
-    field(accounting,"ABD_BLUESEER_LABOR_ITEM","Labor service item code")
-    field(accounting,"ABD_BLUESEER_PARTS_ITEM","Parts service item code")
-    field(accounting,"ABD_BLUESEER_TRAVEL_ITEM","Travel service item (optional)")
+    ttk.Label(codes,text="Business accounting codes",font=("Sans",13,"bold")).pack(anchor="w")
+    ttk.Label(codes,text="Use the actual site, account, terms and service item codes configured in BlueSeer.",
+              wraplength=530).pack(anchor="w",pady=(0,10))
+    field(codes,"ABD_BLUESEER_SITE","BlueSeer business site code")
+    field(codes,"ABD_BLUESEER_AR_ACCOUNT","Accounts receivable account code")
+    field(codes,"ABD_BLUESEER_TERMS","Customer payment terms code")
+    field(codes,"ABD_BLUESEER_LABOR_ITEM","Labor service item code")
+    field(codes,"ABD_BLUESEER_PARTS_ITEM","Parts service item code")
+    field(codes,"ABD_BLUESEER_TRAVEL_ITEM","Travel service item (optional)")
     def check_service():
         import urllib.error
         import urllib.request
