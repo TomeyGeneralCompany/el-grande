@@ -9,6 +9,8 @@ from unittest.mock import patch
 
 import parts
 import blue_bridge
+import customer_bridge
+import invoice_bridge
 
 FILE=Path(__file__).with_name("desk.py")
 spec=importlib.util.spec_from_file_location("abd_desk_integration",FILE)
@@ -132,5 +134,85 @@ class BlueSeerTests(unittest.TestCase):
     self.assertEqual(calls[0][1]["pass"],"test-pass")
     self.assertEqual(calls[1][1]["sessionid"],"fake-session")
     self.assertEqual(calls[1][1]["id"],"addQuoteTransaction")
+
+class CustomerAndAccountingTests(unittest.TestCase):
+ def setUp(self):
+    self.env=patch.dict(os.environ,{**CONFIG,"ABD_BLUESEER_AR_ACCOUNT":"1100","ABD_BLUESEER_TERMS":"NET30","ABD_BLUESEER_ENABLE_LIVE_INVOICES":"yes"})
+    self.env.start()
+    self.ticket={"id":7,"customer":"Jane Doe","phone":"555-0100",
+        "location":"Manistee","machine":"2018 Santa Fe","problem":"no start",
+        "blue_customer":"ABD000007","blue_ship_to":"ABD000007",
+        "labor_hours":"2","labor_rate":"85","parts_charge":"140",
+        "travel_charge":"40","extra_charge":"0","parts_cost":"110",
+        "finalized_at":"2026-11-18T15:00:00Z"}
+    self.math={"labor":Decimal("170.00"),"total":Decimal("350.00"),"basis":Decimal("350.00")}
+ def tearDown(self):self.env.stop()
+ def test_native_customer_record_format(self):
+    import json
+    body=customer_bridge.customer_payload(self.ticket,"ABD000007")
+    master,contact,shipto=body.split("=_=")
+    cm=json.loads(master);cms=json.loads(shipto)
+    self.assertEqual(cm["cm_code"],"ABD000007")
+    self.assertEqual(cm["cm_ar_acct"],"1100")
+    self.assertEqual(cms["cms_shipto"],"ABD000007")
+    self.assertEqual(json.loads(contact),[])
+ def test_invoice_requires_operator_activation(self):
+    with patch.dict(os.environ,{"ABD_BLUESEER_ENABLE_LIVE_INVOICES":"no"}):
+        with self.assertRaises(blue_bridge.BridgeError):invoice_bridge.require_invoice_permission()
+ def test_invoice_payload_reconciles_and_uses_native_records(self):
+    import json
+    class Client:
+        def get(self,*args):
+            return {"cm_code":"ABD000007","cm_terms":"NET30","cm_curr":"USD",
+                    "cm_ar_acct":"1100","cm_ar_cc":""}
+    with patch.dict(os.environ,{"ABD_BLUESEER_TRAVEL_ITEM":"TRAVEL"}):
+        payload=invoice_bridge.prepare_invoice(self.ticket,self.math,"917",Client())
+    detail,master,tree=payload.split("=_=")
+    lines=json.loads(detail);hdr=json.loads(master)
+    self.assertEqual(hdr["sh_id"],"917")
+    self.assertEqual(hdr["sh_so"],"ABD000007")
+    self.assertEqual(hdr["sh_ar_acct"],"1100")
+    self.assertEqual(sum(Decimal(str(p["shd_qty"]))*Decimal(str(p["shd_netprice"])) for p in lines),Decimal("350"))
+    self.assertEqual(json.loads(tree),[])
+    self.assertEqual(lines[0]["shd_qty"],2)
+    self.assertEqual(lines[0]["shd_netprice"],85.0)
+ def test_native_invoice_refuses_bill_discrepancy(self):
+    class Client:
+        def get(self,*args):return {}
+    with self.assertRaises(blue_bridge.BridgeError):
+        invoice_bridge.prepare_invoice(self.ticket,{**self.math,"basis":Decimal("351")},17,Client())
+ def test_duplicate_shipper_refuses_auto_confirmation(self):
+    class Client:
+        def __init__(self):self.actions=[]
+        def get(self,resource,action,ident):
+            if action=="getServiceOrderMstr":return {"sv_nbr":"ABD000007"}
+            if action=="getCustMstr":return {"cm_code":"ABD000007","cm_curr":"USD","cm_ar_acct":"1100"}
+            if action=="getShipMstr":return {"sh_id":"917"}
+            return None
+        def post(self,*args):self.actions.append(args);return ["0","ok"]
+    fake=Client()
+    with patch.dict(os.environ,{"ABD_BLUESEER_TRAVEL_ITEM":"TRAVEL"}):
+        with self.assertRaises(blue_bridge.BridgeError):
+            invoice_bridge.post_native_invoice(self.ticket,self.math,"917",fake)
+    self.assertEqual(fake.actions,[])
+ def test_native_invoice_api_sequence(self):
+    class Client:
+        def __init__(self):self.calls=[]
+        def get(self,resource,action,ident):
+            self.calls.append(action)
+            if action=="getServiceOrderMstr":return {"sv_nbr":"ABD000007"}
+            if action=="getCustMstr":return {"cm_code":"ABD000007","cm_curr":"USD","cm_ar_acct":"1100"}
+            if action=="getShipMstr":return None
+        def post(self,resource,action,body):
+            self.calls.append(action);return ["0","ok"]
+        def request(self,resource,action,body,**headers):
+            self.calls.append(action);return ""
+        def call(self,resource,action,**headers):
+            self.calls.append(action);return ["0","confirmed"]
+    fake=Client()
+    with patch.dict(os.environ,{"ABD_BLUESEER_TRAVEL_ITEM":"TRAVEL"}):
+        self.assertEqual(invoice_bridge.post_native_invoice(self.ticket,self.math,"917",fake),"917")
+    self.assertEqual(fake.calls,["getServiceOrderMstr","getCustMstr","getShipMstr",
+                                  "addShipperTransaction","updateShipperSAC","confirmShipperTransaction"])
 
 if __name__=="__main__":unittest.main()
