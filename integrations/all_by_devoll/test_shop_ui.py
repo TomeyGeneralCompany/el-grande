@@ -57,6 +57,17 @@ class ShopUITests(unittest.TestCase):
                        "erp":{"running":True,"configured":False}})
         self.assertIn("BlueSeer responding · setup needed",page)
         self.assertIn("Business inbox configured",page)
+    def test_unchanged_price_after_native_sync_is_not_rejected(self):
+        with desk.db() as con:
+            con.execute("INSERT INTO blue_sync(ticket_id,kind,record_number,state,updated_at) VALUES (?,?,?,?,?)",
+                        (self.job,"quote","ABD000001","synced",desk.utc()))
+        desk.update_ticket(self.job,{"labor_hours":"0.00","labor_rate":"0.00","parts_charge":"0.00",
+                                     "notes":"Spoke to customer"})
+        with desk.db() as con:
+            row=con.execute("SELECT notes FROM tickets WHERE id=?",(self.job,)).fetchone()
+        self.assertEqual(row["notes"],"Spoke to customer")
+        with self.assertRaises(ValueError):
+            desk.update_ticket(self.job,{"parts_charge":"5.00"})
     def test_closed_job_has_actual_invoice_not_edit_form(self):
         desk.finish_job(self.job,{
             "work_performed":"Changed pads and tested braking",
