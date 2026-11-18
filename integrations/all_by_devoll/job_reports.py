@@ -140,7 +140,7 @@ def process_pending(database,math_fn,send_fn=send_report,limit=10):
         return 0
     with database() as con:
         candidates=con.execute("""SELECT ticket_id FROM owner_reports
-                    WHERE state IN ('pending','failed') AND attempts<10
+                    WHERE state IN ('pending','failed')
                     ORDER BY ticket_id LIMIT ?""",(limit,)).fetchall()
     sent=0
     for item in candidates:
