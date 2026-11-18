@@ -202,3 +202,47 @@ The configured URLs must actually exist and be authorized by their suppliers. Th
 The existing ABD_PARTS_FEED_* legacy feed remains supported as a third independent provider. A refresh downloads all configured feeds and validates supplier identity to prevent misattribution. Records retain the source URL and checked-at timestamps. If the source is not connected, the operator can open the supplier catalogue manually, obtain a valid quotation, and import the price using the CSV interface.
 
 The business email connection is **independent** of parts vendors: the website continues emailing allbydevoll@gmail.com via FormSubmit; El Grande watches that mailbox using authorized Gmail IMAP login and saves service requests as tickets. It neither logs into Detroit Axle/AutoZone through Gmail nor automatically sends customer estimates.
+
+## Quick Google part-price reference and actual job completion (November 2026)
+
+The operator dashboard now includes a **Quick part search (Google)** form on each ticket. The search uses the ticket's vehicle/equipment details and a part description to open a prefilled Google web-search page. This is a practical, human-verified **reference price**, not a licensed automated retail feed, not an actual supplier quote, and not a guaranteed fitment. The operator can compare results and record the price separately from confirmed Detroit Axle / AutoZone catalogue costs. No scraped prices are inserted into financial records. Google's legacy Custom Search JSON API does not accept new customers in 2026 and is scheduled for discontinuation in January 2027; do not assume it can power a new automated feed.
+
+### Completion and owner oversight
+
+On each unfinished ticket, use the **Complete job — actual figures** form. The operator records:
+
+- What work was actually performed (required, not an AI summary)
+- Optional actual start/finish timestamps
+- Actual hours worked
+- Actual labor **cost to the operator** (distinct from labor billed to the customer)
+- Actual parts **cost to the operator** (distinct from part prices charged)
+- Other actual job expenses
+- The **entire final customer invoice**.
+
+Click **Complete job, lock actual bill, queue owner email**. The actual bill is locked, and Tomey General's share is calculated from the total final invoice before labor, parts, and any other expenses. An owner-report entry is recorded in the SQLite outbox and a background worker tries to send it. The operator sees the saved completion details and outbox state in the ticket.
+
+No email is sent to the customer. No business email address or business account login is embedded in the code.
+
+### Owner Gmail notification
+
+Add these values to the protected `~/.config/all-by-devoll/desk.env` used by the systemd service:
+
+    ABD_OWNER_REPORT_TO=YOUR_OWN_EMAIL_ADDRESS
+    ABD_REPORT_SMTP_USER=allbydevoll@gmail.com
+    ABD_REPORT_SMTP_APP_PASSWORD=YOUR_GMAIL_APP_PASSWORD
+
+The two REPORT_SMTP variables are optional when ABD_IMAP_USER and ABD_IMAP_APP_PASSWORD already represent the same authorized business Gmail account. The worker uses Gmail SMTP over TLS and checks the outbox every minute. Do **not** commit passwords or enter them into a public website.
+
+Every completion report includes the ticket ID, customer contact, vehicle, work performed, actual time and expenses, full final invoice, Tomey General 15% (first), operator 85% (before costs), and operator remainder after recorded costs. An email failure is retained in the outbox for retries; successful reports are marked sent. As with ordinary SMTP, a crash between accepted delivery and marking the outbox sent can lead to a duplicate email, so ticket IDs are included for reconciliation. Reports are not lost simply because SMTP is temporarily unavailable.
+
+The owner-report recipient is a required deployment configuration; the code does not guess your private email address. If ABD_OWNER_REPORT_TO is not configured, the completion still saves, but automatic delivery is disabled until it is set.
+
+### Acceptance checks
+
+1. Create a test ticket, open its Google part-price search and check that the browser searches the correct vehicle and part. Do not mistake a displayed result for a confirmed parts cost.
+2. Complete a job with a $350 total bill, 2.5 hours actual time, $80 actual labor expense, $110 actual parts cost and $10 other expense.
+3. Verify the report says Tomey General $52.50 off the top, operator $297.50 before expenses, and operator remainder $97.50 after those example expenses.
+4. Configure an owner email, run a test completion and confirm that the message arrives at that address. Check the ticket reports **sent**.
+5. Restore the queue from a temporary SMTP failure and check the retry behavior. Verify that the job can no longer be silently edited after finalization.
+
+Existing email intake, supplier catalogue handling and native BlueSeer service-order accounting are unchanged by these additions.
