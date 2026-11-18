@@ -48,6 +48,9 @@ def save(payload):
     old["ABD_OWNER_REPORT_TO"]=owner
     old["ABD_IMAP_USER"]=business
     old["ABD_REPORT_SMTP_USER"]=business
+    # The same authorized business Gmail credential is used for incoming
+    # service requests and outgoing completed-job notifications.
+    old["ABD_REPORT_SMTP_APP_PASSWORD"]=old.get("ABD_IMAP_APP_PASSWORD","")
     if not old.get("ABD_BLUESEER_ENABLE_LIVE_INVOICES"):
         old["ABD_BLUESEER_ENABLE_LIVE_INVOICES"]="no"
     HOME_CONFIG.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
