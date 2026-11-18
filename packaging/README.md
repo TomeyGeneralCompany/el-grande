@@ -24,7 +24,7 @@ The reporting destination defaults to `isaiztomey7@gmail.com`, and can be change
 
 ## Installer download
 
-In this repository, open **Actions → El Grande Zorin installer**, choose the latest successful run and download the **el-grande-zorin-deb** artifact. Unzip it with the Files graphical archive manager; double-click `el-grande_0.1.0_all.deb` to install through Zorin's graphical software installer. The software installer may ask for the *computer administrator's password* to install system packages — this is different from an application login and is managed by Zorin.
+In this repository, open **Actions → El Grande Zorin installer**, choose the latest successful run and download the **el-grande-zorin-deb** artifact. Unzip it with the Files graphical archive manager; double-click `el-grande_0.2.0_all.deb` to install through Zorin's graphical software installer. The software installer may ask for the *computer administrator's password* to install system packages — this is different from an application login and is managed by Zorin.
 
 Once installed, use the El Grande desktop entry; the first launch shows the setup wizard, and later launches go straight to the dashboard.
 
@@ -43,3 +43,21 @@ The Java ERP runtime is bundled to avoid an additional manual install, but its b
 CI packages the .deb with `packaging/build-java.sh` and `packaging/build-deb.sh`. CI performs Python checks and Java compilation before uploading an artifact. Runtime dependencies are installed automatically by the graphical package manager. The standalone Python desk remains usable even if the BlueSeer accounting setup has not been completed.
 
 The legacy `all-by-devoll-desk.service` from the earlier checkout is stopped during graphical first-run setup so it cannot occupy the same local port. The wizard uses SQLite's online backup API to migrate the earlier developer checkout database if present and leaves the original copy untouched.
+
+
+## El Grande 0.2.0: shop-facing interface and live connection setup
+
+This upgrade replaces the first-version wall of forms and internal settlement banners with a clean All by Devoll shop workspace. The main screen has open/new/active/completed job counts and a job list. Opening a job shows its estimate, labor, parts lookup, work completion, and native ERP actions. Accounting-specific codes remain within expandable job details, while Tomey General's 15% allocation remains calculated in the backend and included in owner reporting rather than shown to the mechanic as shop branding.
+
+**Upgrade existing installation:** download the newest successful 0.2.0 artifact from Actions, extract it, and install through Zorin's software manager. The package version is incremented, so it upgrades existing 0.1.0 without erasing ticket records or configuration in the home directory. On the next browser refresh, the new shop interface is served.
+
+Open **El Grande Setup** in Zorin's applications menu to configure the actual connections:
+
+1. **Office & Email** tab: enter the business Gmail app password and click **Test business Gmail connection**. This uses a real Gmail login, without sending messages or changing the mailbox. Save settings to restart the job desk service, activating website email intake and completed-job owner reports.
+2. **ERP Connection** tab: click **Check local ERP service** to check the installed Java API. Enter the BlueSeer login and click **Test BlueSeer login**. A successful test establishes authentication, not that the accounting master data are ready.
+3. **Accounting Codes** tab: enter the business-specific site, receivables account, terms, labor service item, parts service item, and optional travel item. Confirm these against the installed BlueSeer business database before native postings.
+4. **Save settings & Open Job Desk** restarts the local service so the updated settings take effect.
+
+A missing or unconfigured ERP is shown as such in the shop's **Office connections** panel. The app does not claim financial posting is ready merely because the API port responds. Native invoice posting remains disabled until real accounting validation is complete.
+
+The user does not need to create or remember an El Grande dashboard password. No customer-facing quotes are sent automatically.
