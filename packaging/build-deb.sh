@@ -23,12 +23,12 @@ Version: $VERS
 Section: office
 Priority: optional
 Architecture: all
-Maintainer: Tomey General Company <support@invalid.example>
+Maintainer: Tomey General Company <noreply@github.com>
 Depends: python3 (>= 3.10), python3-tk, default-jre | openjdk-17-jre | openjdk-21-jre
 Description: All by Devoll local job desk and BlueSeer ERP runtime
  Operator-only ticket dashboard, job reporting, local SQLite storage,
  and bundled BlueSeer classes and resources. First-run desktop setup.
 EOF
 chmod 755 "$PKG/opt/el-grande/packaging/el-grande-launcher.py"
-dpkg-deb --build "$PKG" "$OUT/el-grande_${VERS}_all.deb"
+dpkg-deb --root-owner-group --build "$PKG" "$OUT/el-grande_${VERS}_all.deb"
 echo "Package: $OUT/el-grande_${VERS}_all.deb"
