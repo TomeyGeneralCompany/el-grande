@@ -55,7 +55,7 @@ class ShopUITests(unittest.TestCase):
         self.assertIn("BlueSeer not responding",page)
         page=self.page({"mailbox":True,"report":True,
                        "erp":{"running":True,"configured":False}})
-        self.assertIn("BlueSeer running · business setup needed",page)
+        self.assertIn("BlueSeer responding · setup needed",page)
         self.assertIn("Business inbox configured",page)
     def test_closed_job_has_actual_invoice_not_edit_form(self):
         desk.finish_job(self.job,{
