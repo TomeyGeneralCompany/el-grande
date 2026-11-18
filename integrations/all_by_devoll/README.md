@@ -176,3 +176,29 @@ Verify the actual Gmail message format and deduplication, source-stamped vendor 
 - customer_bridge.py: native BlueSeer customer and ship-to creation
 - invoice_bridge.py: guarded native shipper-to-AR/GL invoicing
 - test_integrations.py: supplier, native adapter and accounting mock checks
+
+## Preferred parts suppliers: Detroit Axle and AutoZone
+
+All by Devoll commonly purchases from **Detroit Axle** and **AutoZone**. The internal desk links to their real catalogues and accepts independently source-stamped authorized price feeds for both. Each provider keeps its own supplier/SKU identity; supplier prices are never invented and are never treated as a confirmed vehicle fitment until the mechanic verifies fitment.
+
+**Detroit Axle:** official catalogue https://detroitaxle.com/parts, wholesale enrollment https://detroitaxle.com/wholesale. Its published Terms of Service disallow automated scraping/robots/AI tools accessing its website. Do NOT configure a public storefront scraper. Ask Detroit Axle wholesale support for an approved catalogue export/feed or data-sharing authorization. The code accepts authorized supplier JSON/CSV over HTTPS or operator-imported supplier CSV.
+
+**AutoZone:** AutoZonePro https://www.autozonepro.com/ offers commercial account catalogue access; AutoZone has documented third-party direct API and cXML punchout integrations with commercial partners. Contact the AutoZone commercial account representative for the supported API/punchout integration or authorized catalogue export. Public autozone.com prices are not assumed to be commercial account pricing. The generic HTTPS feed contract can ingest an approved feed that outputs standardized records.
+
+Configure independent authorized supplier feeds in your protected systemd environment file (all sample URLs are PLACEHOLDERS):
+
+    ABD_DETROIT_AXLE_URL=https://approved-detroit-feed.example/api/parts
+    ABD_DETROIT_AXLE_HOST=approved-detroit-feed.example
+    ABD_DETROIT_AXLE_TOKEN=APPROVED_VENDOR_TOKEN
+    ABD_DETROIT_AXLE_SUPPLIER=Detroit Axle
+
+    ABD_AUTOZONE_URL=https://approved-autozone-feed.example/api/parts
+    ABD_AUTOZONE_HOST=approved-autozone-feed.example
+    ABD_AUTOZONE_TOKEN=APPROVED_COMMERCIAL_TOKEN
+    ABD_AUTOZONE_SUPPLIER=AutoZone
+
+The configured URLs must actually exist and be authorized by their suppliers. Their response must match the catalogue JSON/CSV schema described earlier. AutoZone's native direct API and punchout formats, if offered to All by Devoll, may require a separate response-format adapter; do not assume these sample URLs represent a published AutoZone or Detroit Axle API.
+
+The existing ABD_PARTS_FEED_* legacy feed remains supported as a third independent provider. A refresh downloads all configured feeds and validates supplier identity to prevent misattribution. Records retain the source URL and checked-at timestamps. If the source is not connected, the operator can open the supplier catalogue manually, obtain a valid quotation, and import the price using the CSV interface.
+
+The business email connection is **independent** of parts vendors: the website continues emailing allbydevoll@gmail.com via FormSubmit; El Grande watches that mailbox using authorized Gmail IMAP login and saves service requests as tickets. It neither logs into Detroit Axle/AutoZone through Gmail nor automatically sends customer estimates.
