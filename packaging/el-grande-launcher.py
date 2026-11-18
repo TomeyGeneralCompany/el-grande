@@ -68,6 +68,22 @@ def prepare_local_data():
         )
         cfg.chmod(0o600)
 
+def ensure_first_run_defaults():
+    # A brand-new install should open the shop directly. Email authorization
+    # is offered in Settings when convenient, not as a startup obstacle.
+    if ENV.exists():return
+    prepare_local_data()
+    write_env({
+        "ABD_OWNER_REPORT_TO":"isaiztomey7@gmail.com",
+        "ABD_IMAP_USER":"allbydevoll@gmail.com",
+        "ABD_IMAP_APP_PASSWORD":"",
+        "ABD_BLUESEER_URL":"http://127.0.0.1:8088/bsapi",
+        "ABD_BLUESEER_ENABLE_LIVE_INVOICES":"no",
+        "ABD_DB":str(DATA / "data" / "tickets.sqlite3"),
+        "ABD_BIND":"127.0.0.1",
+        "ABD_DASHBOARD_PASSWORD":""
+    })
+
 def try_dashboard():
     try:
         with urllib.request.urlopen("http://127.0.0.1:8765/",timeout=2) as r:
@@ -253,9 +269,11 @@ def configure():
     root.mainloop()
 
 def main():
-    if "--setup" in sys.argv or not ENV.exists():
+    if "--setup" in sys.argv:
+        # Compatibility for installations already using the old setup icon.
         configure()
     else:
+        ensure_first_run_defaults()
         open_dashboard()
 
 if __name__=="__main__":
