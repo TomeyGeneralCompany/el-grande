@@ -101,9 +101,9 @@ def connection_status(config,erp):
         report=('Owner reports configured','good')
     else:report=('Owner reports not connected','')
     if erp["running"] and erp["configured"]:
-        erptext=('BlueSeer running · business codes configured','good')
+        erptext=('BlueSeer responding · settings entered','good')
     elif erp["running"]:
-        erptext=('BlueSeer running · business setup needed','')
+        erptext=('BlueSeer responding · setup needed','')
     else:
         erptext=('BlueSeer not responding','bad')
     return '<div class="statusbar">'+''.join(
