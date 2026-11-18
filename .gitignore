@@ -11,3 +11,13 @@ test2
 !scripts/build.xml
 nbproject/private/
 .nb-gradle/
+
+# All by Devoll local runtime and credentials
+integrations/all_by_devoll/data/
+integrations/all_by_devoll/*.sqlite3
+integrations/all_by_devoll/*.sqlite3-wal
+integrations/all_by_devoll/*.sqlite3-shm
+integrations/all_by_devoll/.env
+integrations/all_by_devoll/desk.env
+integrations/all_by_devoll/__pycache__/
+integrations/all_by_devoll/*.pyc
