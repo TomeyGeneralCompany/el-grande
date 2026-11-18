@@ -25,7 +25,7 @@ CONFIG={
  "ABD_BLUESEER_CUSTOMER":"TEST_CUST",
  "ABD_BLUESEER_LABOR_ITEM":"LABOR",
  "ABD_BLUESEER_PARTS_ITEM":"PARTS",
- "ABD_BLUESEER_SERVICE_TYPE":"quote",
+ "ABD_BLUESEER_SERVICE_TYPE":"order",
 }
 CSV="""supplier,sku,description,unit_cost,suggested_sale,currency,availability,checked_at,supplier_url
 DemoSupplier,ST-123,Starter assembly,110.00,140.00,USD,in_stock,2026-11-18T12:00:00Z,https://supplier.example/parts/ST-123
