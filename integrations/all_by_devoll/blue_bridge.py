@@ -163,6 +163,22 @@ def build_payloads(ticket,math):
             "quote":json.dumps(qd)+"=_="+json.dumps(q)+"=_=[]",
             "line_total":sum(Decimal(str(price))*Decimal(str(qty)) for _,_,price,qty in lines)}
 
+def verify_existing_lines(client,kind,key,expected_total,customer_code):
+    if kind=="quote":
+        rows=client.get("dataServORD","getQuoteDet",key)
+        qty="quod_qty"; price="quod_netprice"
+    else:
+        rows=client.get("dataServORD","getServiceOrderDet",key)
+        qty="svd_qty"; price="svd_netprice"
+    if not isinstance(rows,list) or not rows:
+        raise BridgeError("Existing BlueSeer "+kind+" has no detail rows; reconcile manually")
+    try:
+        total=sum((Decimal(str(r[qty]))*Decimal(str(r[price])) for r in rows),Decimal("0"))
+    except (KeyError,TypeError,ValueError) as exc:
+        raise BridgeError("Existing native "+kind+" has invalid lines") from exc
+    if total.quantize(Decimal(".01"))!=expected_total:
+        raise BridgeError("Existing BlueSeer "+kind+" does not match local estimate; native amendment required")
+
 def submit_internal_quote(ticket,math,client=None):
     require_config()
     if ticket["finalized_at"]:raise BridgeError("Do not overwrite a finalized ticket")
@@ -172,6 +188,9 @@ def submit_internal_quote(ticket,math,client=None):
     client=client or BlueSeerClient()
     existing=client.get("dataServORD","getQuoteMstr",payload["key"])
     if isinstance(existing,dict) and existing.get("quo_nbr")==payload["key"]:
+        if existing.get("quo_cust")!=header_data(ticket,math)[2]:
+            raise BridgeError("Existing BlueSeer quote belongs to another customer")
+        verify_existing_lines(client,"quote",payload["key"],math["total"],existing["quo_cust"])
         return payload["key"],"exists"
     result=client.post("dataServORD","addQuoteTransaction",payload["quote"])
     return payload["key"],"created"
@@ -184,6 +203,9 @@ def submit_service_order(ticket,math,client=None):
     client=client or BlueSeerClient()
     existing=client.get("dataServORD","getServiceOrderMstr",payload["key"])
     if isinstance(existing,dict) and existing.get("sv_nbr")==payload["key"]:
+        if existing.get("sv_cust")!=header_data(ticket,math)[2]:
+            raise BridgeError("Existing BlueSeer service order belongs to another customer")
+        verify_existing_lines(client,"service_order",payload["key"],math["total"],existing["sv_cust"])
         return payload["key"],"exists"
     client.post("dataServORD","addServiceOrderTransaction",payload["service_order"])
     return payload["key"],"created"
