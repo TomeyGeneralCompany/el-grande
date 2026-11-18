@@ -232,7 +232,7 @@ def render(rows,catalog,db,amounts,system=None):
     html_top='''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#123f3e"><title>All by Devoll | Shop Desk</title><style>'''+CSS+'''</style></head><body>
 <header><div class="wrap"><div class="brand"><div class="mark">AD</div><div><strong>ALL BY DEVOLL</strong><small>Mobile repair & service · Shop desk</small></div></div>
 <div class="topmeta">Office workspace <a href="/health">System status</a></div></div></header>
-<nav><div class="wrap"><a href="#jobs">Jobs</a><a href="#new">New request</a><a href="#catalogue">Parts</a><a href="#connection">Connections</a><a href="/export.csv">Export records</a></div></nav><main>
+<nav><div class="wrap"><a href="#jobs">Jobs</a><a href="#new">New request</a><a href="#catalogue">Parts</a><a href="/settings">Settings</a><a href="/export.csv">Export records</a></div></nav><main>
 <div class="intro"><div><p class="eyebrow">Workshop overview</p><h1>Today's job desk</h1><p class="muted">Service requests, estimates and completed jobs in one place.</p></div><a class="action" href="#new">+ New service request</a></div>
 '''
     content='<div class="cards">'+stats+'</div>'
@@ -244,7 +244,5 @@ def render(rows,catalog,db,amounts,system=None):
     content+='<ul class="catalog list">'+(catalogue or '<li>No supplier parts loaded. You can still search market prices within any job.</li>')+'</ul>'
     content+='<details class="inner"><summary>Import supplier prices (CSV)</summary><form method="post" action="/parts/import"><label>Paste catalogue CSV<textarea name="catalog"></textarea></label>'+button("Import prices")+'</form></details>'
     content+=postform('/parts/fetch',"Refresh connected supplier feeds","action secondary")+'</section>'
-    content+='<section class="panel" id="connection"><div class="panelhead"><h2>Office connections</h2><span class="muted small">Local services</span></div>'
-    content+=connection_status(config,erp)
-    content+='<p class="muted small">To add the business Gmail account or update report settings, open <strong>El Grande Setup</strong> from the computer’s application menu. BlueSeer accounting needs valid customer, item and account settings before its records can be posted.</p></section>'
+
     return html_top+content+'</main><footer><div class="wrap">All by Devoll · Internal office system</div></footer></body></html>'

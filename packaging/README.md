@@ -24,7 +24,7 @@ The reporting destination defaults to `isaiztomey7@gmail.com`, and can be change
 
 ## Installer download
 
-In this repository, open **Actions → El Grande Zorin installer**, choose the latest successful run and download the **el-grande-zorin-deb** artifact. Unzip it with the Files graphical archive manager; double-click `el-grande_0.2.0_all.deb` to install through Zorin's graphical software installer. The software installer may ask for the *computer administrator's password* to install system packages — this is different from an application login and is managed by Zorin.
+In this repository, open **Actions → El Grande Zorin installer**, choose the latest successful run and download the **el-grande-zorin-deb** artifact. Unzip it with the Files graphical archive manager; double-click `el-grande_0.3.0_all.deb` to install through Zorin's graphical software installer. The software installer may ask for the *computer administrator's password* to install system packages — this is different from an application login and is managed by Zorin.
 
 Once installed, use the El Grande desktop entry; the first launch shows the setup wizard, and later launches go straight to the dashboard.
 
@@ -61,3 +61,16 @@ Open **El Grande Setup** in Zorin's applications menu to configure the actual co
 A missing or unconfigured ERP is shown as such in the shop's **Office connections** panel. The app does not claim financial posting is ready merely because the API port responds. Native invoice posting remains disabled until real accounting validation is complete.
 
 The user does not need to create or remember an El Grande dashboard password. No customer-facing quotes are sent automatically.
+
+
+## El Grande 0.3 — One application, one settings page
+
+The mechanic's shop dashboard does not contain connection warnings, internal technical instructions, or parent-company settlement banners. The sole **Settings** navigation link opens the email connection within the same local El Grande browser app.
+
+On the first launch after installing version 0.3, El Grande creates the local ticket database, creates/retains the bundled BlueSeer SQLite working database, registers and starts its local BlueSeer Java API and opens the shop directly. There is no separate BlueSeer installer and no requirement to use the deprecated setup desktop icon. The system automatically preserves the existing environment and job records on a package upgrade.
+
+Email setup is intentionally minimal: **Settings → Business email** has the shop Gmail address, the parent's report destination (pre-filled), and one credential field with a direct link to Google's app-password page. After that credential has been authorized by Google and saved, the desk's mail reader and report sender work without a separate terminal process or restart. The **Test Gmail connection** button checks the live business mailbox login.
+
+Local BlueSeer processes and SQLite runtime are installed together and brought up automatically. A running BlueSeer API does **not** by itself prove that business-specific AR codes, items, and account permissions are valid. Native invoice/GL posting remains disabled until those records have been verified. Ordinary job tickets and final bills continue to work locally without that step; do not represent them as reconciled BlueSeer journal entries.
+
+The old graphical setup application remains in the package as a backward-compatibility script path only. The default installation exposes only one El Grande app icon.

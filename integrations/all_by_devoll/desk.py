@@ -30,6 +30,7 @@ import blue_bridge
 import invoice_bridge
 import job_reports
 import shop_ui
+import office_settings
 import urllib.error
 import customer_bridge
 from urllib.parse import parse_qs, urlsplit
@@ -220,12 +221,14 @@ def parse_request(msg):
     return fields,(plain or markup)[:15000]
 
 def import_mailbox_once():
-    if not (IMAP_USER and IMAP_PASSWORD):
+    mailbox_user=os.getenv("ABD_IMAP_USER","")
+    mailbox_secret=os.getenv("ABD_IMAP_APP_PASSWORD","")
+    if not (mailbox_user and mailbox_secret):
         return 0
     count=0
     conn=imaplib.IMAP4_SSL(IMAP_HOST)
     try:
-        conn.login(IMAP_USER, IMAP_PASSWORD)
+        conn.login(mailbox_user, mailbox_secret)
         result,_=conn.select(IMAP_FOLDER,readonly=True)
         if result!="OK":raise RuntimeError("Cannot select mailbox")
         result,data=conn.uid("search",None,"ALL")
@@ -236,7 +239,7 @@ def import_mailbox_once():
         valid=(info[0].decode(errors="replace") if info and info[0] else "unknown")
         for uid in ids:
             uidstr=uid.decode()
-            marker=f"imap:{IMAP_USER}:{IMAP_FOLDER}:{valid}:{uidstr}"
+            marker=f"imap:{mailbox_user}:{IMAP_FOLDER}:{valid}:{uidstr}"
             with db() as con:
                 if con.execute("SELECT 1 FROM importer WHERE key=?", (marker,)).fetchone():continue
             result,records=conn.uid("fetch",uid,"(RFC822)")
@@ -554,9 +557,9 @@ def erp_status():
     return {"running":reachable,"configured":configured}
 
 def system_status():
-    return {"mailbox":bool(IMAP_USER and IMAP_PASSWORD),
+    return {"mailbox":bool(os.getenv("ABD_IMAP_USER") and os.getenv("ABD_IMAP_APP_PASSWORD")),
             "report":bool(os.getenv("ABD_OWNER_REPORT_TO") and
-                (os.getenv("ABD_REPORT_SMTP_APP_PASSWORD") or IMAP_PASSWORD)),
+                (os.getenv("ABD_REPORT_SMTP_APP_PASSWORD") or os.getenv("ABD_IMAP_APP_PASSWORD"))),
             "erp":erp_status()}
 
 def render(rows,catalog=None):
@@ -600,6 +603,9 @@ class Handler(BaseHTTPRequestHandler):
                 partq=parse_qs(urlsplit(self.path).query).get("partq",[""])[0].strip()
                 catalog=parts.search(con,partq[:100],limit=100) if partq else con.execute("SELECT * FROM supplier_parts ORDER BY checked_at DESC LIMIT 100").fetchall()
             return self.response_text(render(rows,catalog))
+        if path=="/settings":
+            return self.response_text(office_settings.page(office_settings.existing(),
+                                  parse_qs(urlsplit(self.path).query).get("status",[""])[0]))
         if path=="/health":
             return self.response_text(json.dumps({"ok":True,"database":str(DB),"connections":system_status()}),typ="application/json")
         if path=="/export.csv":
@@ -629,6 +635,15 @@ class Handler(BaseHTTPRequestHandler):
         data={k:v[0] for k,v in parse_qs(self.rfile.read(size).decode("utf-8",errors="replace"),keep_blank_values=True).items()}
         path=urlsplit(self.path).path
         try:
+            if path=="/settings/save":
+                office_settings.save(data)
+                return self.redirect("/settings?status=saved")
+            if path=="/settings/test-gmail":
+                try:
+                    office_settings.test_gmail()
+                except (OSError,imaplib.IMAP4.error,ValueError):
+                    return self.redirect("/settings?status=failed")
+                return self.redirect("/settings?status=connected")
             if path=="/parts/import":
                 count=import_parts(data.get("catalog",""),"operator supplier CSV")
                 self.send_response(303);self.send_header("Location","/#parts");self.end_headers();return
@@ -659,6 +674,11 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:
             log.exception("Operator action failed")
             self.response_text("Operation failed. Check server logs.",502)
+    def redirect(self,target):
+        self.send_response(303)
+        self.send_header("Location",target)
+        self.send_header("Cache-Control","no-store")
+        self.end_headers()
     def log_message(self,fmt,*args):log.info("%s - %s",self.address_string(),fmt%args)
 
 def main():
@@ -669,11 +689,10 @@ def main():
         raise SystemExit("Remote dashboard access requires ABD_DASHBOARD_PASSWORD.")
     if not PASSWORD:
         log.info("Local-only mode: no dashboard password required; browser access restricted to localhost.")
-    if IMAP_USER and IMAP_PASSWORD:
-        threading.Thread(target=poller,daemon=True).start()
-    if os.getenv("ABD_OWNER_REPORT_TO"):
-        threading.Thread(target=report_poller,daemon=True).start()
-    else:log.warning("Owner completion reports disabled; configure ABD_OWNER_REPORT_TO")
+    # Always run lightweight pollers so connecting Gmail later via Settings
+    # works without a terminal or service restart.
+    threading.Thread(target=poller,daemon=True).start()
+    threading.Thread(target=report_poller,daemon=True).start()
     if any(os.getenv(p+"_URL") for p in ("ABD_DETROIT_AXLE","ABD_AUTOZONE","ABD_PARTS_FEED")):
         threading.Thread(target=parts_poller,daemon=True).start()
     else:log.warning("Mailbox importer disabled; configure ABD_IMAP_USER and ABD_IMAP_APP_PASSWORD")
