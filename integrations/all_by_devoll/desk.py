@@ -283,6 +283,10 @@ def update_ticket(ticket_id,data):
                     raise ValueError("Invalid BlueSeer customer or ship-to code")
                 cleaned[bluefield]=code
         if not cleaned:return
+        if any(k in cleaned and str(cleaned[k]) != str(before[k]) for k in (*MONEY_FIELDS,"blue_customer","blue_ship_to")):
+            linked=con.execute("SELECT kind FROM blue_sync WHERE ticket_id=? AND state='synced' LIMIT 1",(ticket_id,)).fetchone()
+            if linked:
+                raise ValueError("Quote/service order already synchronized to BlueSeer. Amend that native record before changing the linked financial details.")
         cleaned["updated_at"]=utc()
         sql="UPDATE tickets SET "+", ".join(k+"=?" for k in cleaned)+" WHERE id=?"
         con.execute(sql,(*cleaned.values(),ticket_id))
@@ -296,7 +300,7 @@ def finalize_ticket(ticket_id,final_total):
         if not row:raise LookupError("Ticket not found")
         if row["finalized_at"]:raise ValueError("Already finalized")
         now=utc()
-        con.execute("UPDATE tickets SET bill_total=?, finalized_at=?, status='invoiced', updated_at=? WHERE id=?",
+        con.execute("UPDATE tickets SET bill_total=?, finalized_at=?, status='completed', updated_at=? WHERE id=?",
                     (str(final),now,now,ticket_id))
         con.execute("INSERT INTO events(ticket_id,timestamp,event,detail) VALUES(?,?,?,?)",
                     (ticket_id,now,"bill_finalized",str(final)))
@@ -336,6 +340,8 @@ def save_part(ticket_id, supplier, sku, quantity):
         row=con.execute("SELECT finalized_at FROM tickets WHERE id=?",(ticket_id,)).fetchone()
         if row is None:raise LookupError("Ticket not found")
         if row["finalized_at"]:raise ValueError("Finalized ticket is locked")
+        linked=con.execute("SELECT kind FROM blue_sync WHERE ticket_id=? AND state='synced' LIMIT 1",(ticket_id,)).fetchone()
+        if linked:raise ValueError("Cannot alter supplier-priced parts after BlueSeer synchronization; amend the native order first")
         entry=parts.add_to_ticket(con,ticket_id,supplier,sku,quantity,
                                   os.getenv("ABD_PARTS_MARKUP_PERCENT","0"))
         _,cost,sale=parts.ticket_totals(con,ticket_id)
@@ -418,6 +424,7 @@ def invoice_native(ticket_id):
         now=utc()
         con.execute("UPDATE blue_sync SET state='posted',updated_at=?,detail='Native shipper and AR/GL posted' WHERE ticket_id=? AND kind='invoice'",
                     (now,ticket_id))
+        con.execute("UPDATE tickets SET status='invoiced',updated_at=? WHERE id=? AND status!='paid'",(now,ticket_id))
         con.execute("INSERT INTO events(ticket_id,timestamp,event,detail) VALUES(?,?,?,?)",
                     (ticket_id,now,"blueseer_native_invoice",native_id))
 
@@ -474,7 +481,7 @@ def render(rows, catalog=None):
 <div class="panel" id="parts"><h2>Supplier parts catalogue — internal pricing only</h2><p>Paste a CSV provided by your supplier (supplier,sku,description,unit_cost, optional suggested_sale, currency, availability, checked_at, supplier_url). No invented prices or automatic customer quotes.</p>
 <form method="post" action="/parts/import"><label>Supplier CSV<textarea name="catalog" rows="6"></textarea></label><button type="submit">Import verified supplier data</button></form>
 <form method="post" action="/parts/fetch"><button class="secondary">Refresh authorized supplier feed</button></form>
-<h3>Available supplier prices</h3><ul>''' + "".join(f'<li><b>{escape(x["supplier"])} / {escape(x["sku"])}</b> — {escape(x["description"])} · cost ${escape(x["unit_cost"])} · suggested sale {escape(x["suggested_sale"]) or "not supplied"} · {escape(x["availability"])} · checked {escape(x["checked_at"])}</li>' for x in catalog) + '''</ul></div>
+<h3>Available supplier prices</h3><form method="get" action="/"><label>Search supplier, SKU, description<input name="partq" placeholder="e.g. starter"></label><button>Search parts</button></form><ul>''' + "".join(f'<li><b>{escape(x["supplier"])} / {escape(x["sku"])}</b> — {escape(x["description"])} · cost ${escape(x["unit_cost"])} · suggested sale {escape(x["suggested_sale"]) or "not supplied"} · {escape(x["availability"])} · checked {escape(x["checked_at"])}</li>' for x in catalog) + '''</ul></div>
 <h2>Ticket log</h2>''' + "".join(items) + '''</main><footer>INTERNAL ESTIMATE ONLY — mechanic reviews and phones customer with any proposed price. Never sent or offered automatically. Supplier prices require verified vendor feed. 15% applies to finalized bill before expenses.</footer></body></html>'''
 
 class Handler(BaseHTTPRequestHandler):
@@ -500,7 +507,8 @@ class Handler(BaseHTTPRequestHandler):
         if path=="/":
             with db() as con:
                 rows=con.execute("SELECT * FROM tickets ORDER BY id DESC LIMIT 500").fetchall()
-                catalog=con.execute("SELECT * FROM supplier_parts ORDER BY checked_at DESC LIMIT 100").fetchall()
+                partq=parse_qs(urlsplit(self.path).query).get("partq",[""])[0].strip()
+                catalog=parts.search(con,partq[:100],limit=100) if partq else con.execute("SELECT * FROM supplier_parts ORDER BY checked_at DESC LIMIT 100").fetchall()
             return self.response_text(render(rows,catalog))
         if path=="/health":
             return self.response_text(json.dumps({"ok":True,"database":str(DB),"mailbox_configured":bool(IMAP_USER and IMAP_PASSWORD)}),typ="application/json")
