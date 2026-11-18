@@ -29,6 +29,8 @@ import parts
 import blue_bridge
 import invoice_bridge
 import job_reports
+import shop_ui
+import urllib.error
 import customer_bridge
 from urllib.parse import parse_qs, urlsplit
 
@@ -533,85 +535,27 @@ def invoice_native(ticket_id):
         con.execute("INSERT INTO events(ticket_id,timestamp,event,detail) VALUES(?,?,?,?)",
                     (ticket_id,now,"blueseer_native_invoice",native_id))
 
-def render(rows, catalog=None):
-    catalog=catalog or []
-    escape=lambda x:html.escape(str(x or ""),quote=True)
-    items=[]
-    for row in rows:
-        a=amounts(row); key=int(row["id"])
-        with db() as con:
-            attached=con.execute("SELECT * FROM ticket_parts WHERE ticket_id=? ORDER BY supplier,sku",(key,)).fetchall()
-            syncrows=con.execute("SELECT kind,state,record_number FROM blue_sync WHERE ticket_id=?",(key,)).fetchall()
-        attached_html="".join(f'<li>{escape(p["supplier"])} {escape(p["sku"])} — {escape(p["description"])} · {escape(p["quantity"])} × ${escape(p["unit_cost"])} supplier cost · ${escape(p["unit_sale"])} billable · price checked {escape(p["checked_at"])}</li>' for p in attached)
-        sync_html=" ".join(f'{escape(v["kind"])}: {escape(v["state"])} ({escape(v["record_number"])})' for v in syncrows)
-        selected_supplier=f'<form method="post" action="/ticket/{key}/part"><div class="fields"><label>Verified supplier<input name="supplier" required></label><label>Supplier SKU<input name="sku" required></label><label>Quantity<input type="number" name="quantity" min=".01" step=".01" value="1" required></label></div><button type="submit">Add supplier-priced part</button></form>' if not row["finalized_at"] else ""
-        blue_actions=(f'<form method="post" action="/ticket/{key}/blue-customer"><button type="submit" class="secondary">Create / reuse native BlueSeer customer</button></form><form method="post" action="/ticket/{key}/blue-quote"><button type="submit" class="secondary">Save internal draft to BlueSeer quote</button></form><form method="post" action="/ticket/{key}/blue-order"><button type="submit" class="secondary">Create BlueSeer service order</button></form>' if not row["finalized_at"] else "")
-        def field(name,title):
-            return f'<label>{title}<input name="{name}" type="number" min="0" step="0.01" value="{escape(row[name])}"></label>'
-        opts="".join(f'<option value="{s}" {"selected" if s==row["status"] else ""}>{s.replace("_"," ").title()}</option>' for s in STATUS)
-        editform="".join(field(k,t) for k,t in [
-            ("labor_hours","Labor hours"),("labor_rate","Labor rate $/hour"),
-            ("parts_charge","Parts charged $"),("parts_cost","Parts acquisition cost $"),
-            ("travel_charge","Travel charge $"),("extra_charge","Other charges $")])
-        if not row["finalized_at"]:
-            editform=f'<form method="post" action="/ticket/{key}/update"><div class="fields">{editform}</div><label>BlueSeer customer code<input name="blue_customer" value="{escape(row["blue_customer"])}"></label><label>BlueSeer ship-to code<input name="blue_ship_to" value="{escape(row["blue_ship_to"])}"></label><label>Status<select name="status">{opts}</select></label><label>Notes<textarea name="notes">{escape(row["notes"])}</textarea></label><button>Save internal estimate</button></form>'
-            finalform=f'''<form method="post" action="/ticket/{key}/complete">
-            <h3>Complete job — actual figures, not estimates</h3>
-            <label>Work performed<textarea name="work_performed" required placeholder="Work actually completed; findings, parts fitted, testing">{escape(row["notes"])}</textarea></label>
-            <div class="fields">
-              <label>Start date and time<input type="datetime-local" name="started_at"></label>
-              <label>Finish date and time<input type="datetime-local" name="finished_at"></label>
-              <label>Actual hours worked<input type="number" name="actual_hours" min="0" max="10000" step=".01" value="{escape(row["labor_hours"])}" required></label>
-              <label>Actual labor cost ($) — operator expense<input type="number" name="actual_labor_cost" min="0" step=".01" value="0" required></label>
-              <label>Actual parts cost ($) — operator expense<input type="number" name="actual_parts_cost" min="0" step=".01" value="{escape(row["parts_cost"])}" required></label>
-              <label>Other actual job expenses ($)<input type="number" name="actual_other_cost" min="0" step=".01" value="0" required></label>
-              <label>ACTUAL final customer invoice ($)<input type="number" name="actual_invoice" min="0" step=".01" value="{a["total"]:.2f}" required></label>
-            </div>
-            <button class="final">Complete job, lock actual bill, queue owner email</button>
-            </form>'''
-        else:
-            editform='<p class="locked">Final bill locked.</p>'
-            finalform=('<form method="post" action="/ticket/'+str(key)+'/paid"><button type="submit">Mark bill paid (manual record)</button></form>' if row["status"]!="paid" else '<p>Operator marked this bill paid.</p>')
-            finalform += (f'<form method="post" action="/ticket/{key}/blue-invoice"><button type="submit" class="final">Post finalized invoice through native BlueSeer AR/GL</button></form>' if os.getenv("ABD_BLUESEER_ENABLE_LIVE_INVOICES")=="yes" else '<p>Native invoice posting disabled until BlueSeer production qualification.</p>')
-        with db() as con:
-            completed=con.execute("SELECT * FROM job_completions WHERE ticket_id=?",(key,)).fetchone()
-            ownerstate=con.execute("SELECT state,sent_at,last_error FROM owner_reports WHERE ticket_id=?",(key,)).fetchone()
-        completion_html=""
-        if completed:
-            completion_html=f'<section><h3>Completed job record</h3><p><strong>Work:</strong> {escape(completed["work_performed"])}</p><p>Actual time: {escape(completed["actual_hours"])} hours · Labor expense: ${escape(completed["actual_labor_cost"])} · Parts expense: ${escape(completed["actual_parts_cost"])} · Other expenses: ${escape(completed["actual_other_cost"])}</p><p><strong>Actual invoice: ${escape(completed["actual_invoice"])}</strong> · Owner email: {escape(ownerstate["state"] if ownerstate else "not queued")}</p></section>'
-        lookup=job_reports.google_search_link(row["problem"][:90] or row["service"][:90],row["machine"][:120])
-        search_html=f'<p><a href="{escape(lookup)}" target="_blank" rel="noopener noreferrer">Google: compare market prices for this vehicle / repair</a> — rough reference only, not a verified supplier price.</p>'
-        search_html+=f'<form method="get" action="/"><label>Quick part search (Google)<input name="googlepart" placeholder="Starter, alternator, wheel bearing, etc."></label><input type="hidden" name="vehicle" value="{escape(row["machine"])}"><button>Open Google price search</button></form>'
-        items.append(f'''<details class="ticket" id="ticket-{key}">
-          <summary><strong>ABD-{key:06d}</strong> · {escape(row["customer"])} · {escape(row["service"])} <em>{escape(row["status"])}</em></summary>
-          <p><strong>Call:</strong> {escape(row["phone"])} · <strong>Location:</strong> {escape(row["location"])} · <strong>Vehicle/job:</strong> {escape(row["machine"])} · <strong>Mobility:</strong> {escape(row["mobility"])}</p>
-          <p><strong>Reported:</strong> {escape(row["problem"])}</p>
-          <p><strong>Received:</strong> {escape(row["received_at"])}</p>
-          {editform}
-          {search_html}
-          <h4>Supplier-priced parts</h4><ul>{attached_html or "<li>No supplier-confirmed parts selected.</li>"}</ul>{selected_supplier}
-          <h4>BlueSeer native records</h4><p>{sync_html or "Not synchronized."}</p>{blue_actions}
-          <div class="numbers"><span>Calculated customer quote: <b>${a["total"]:.2f}</b></span>
-            <span>Settlement basis: <b>${a["basis"]:.2f}</b></span>
-            <span>Tomey General 15%: <b>${a["parent"]:.2f}</b></span>
-            <span>Operator 85%: <b>${a["operator"]:.2f}</b></span>
-            <span>Operator after parts acquisition: <b>${a["after_parts"]:.2f}</b></span></div>
-          {finalform}
-          {completion_html}
-          {f'<form method="post" action="/ticket/{key}/suggest"><button type="submit" class="secondary">Generate optional internal Qwen diagnostic notes</button></form>' if not row["finalized_at"] else ''}
-          <pre>{escape(row["ai_notes"]) if row["ai_notes"] else "No AI draft. Pricing requires operator confirmation."}</pre>
-        </details>''')
-    return '''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>All by Devoll • Job Desk</title>
-<style>body{font:16px system-ui,sans-serif;margin:0;background:#f3f5f4;color:#172725}header{background:#102c29;color:#fff;padding:25px max(20px,calc((100vw - 1100px)/2))}header h1{margin:0;color:#efd197}main{max-width:1100px;margin:25px auto;padding:0 16px}.ticket,.panel{background:white;border:1px solid #ccd6d2;padding:16px;margin:14px 0;border-radius:8px}summary{cursor:pointer;font-size:18px}em{float:right;color:#166b61;font-style:normal}label{display:block;font-weight:600;font-size:14px;margin:12px 0}input,select,textarea{display:block;box-sizing:border-box;width:100%;padding:10px;border:1px solid #adbab6;border-radius:5px;font:inherit}textarea{min-height:85px}.fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}.numbers{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:7px;padding:12px;background:#e8f3ee;margin-top:15px}button{background:#106e64;color:white;border:0;border-radius:5px;padding:12px 16px;font-weight:bold;cursor:pointer;margin:8px 0}.final{background:#9b650b}.secondary{background:#354e65}.locked{color:#86550d}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f3f5f4;padding:10px}a{color:#096c63}footer{padding:20px;font-size:12px}</style></head>
-<body><header><h1>All by Devoll — Job Desk</h1><p>Service requests • Internal estimates before calling the customer • Final bills • Tomey General 15%</p></header><main>
-<div class="panel"><h2>New manual ticket</h2><p>Use for telephone, text, or walk-in requests. Website emails are imported automatically when mailbox settings are configured.</p>
-<form method="post" action="/ticket/new"><div class="fields">''' + "".join(f'<label>{escape(k.title())}<input name="{k}" {"required" if k in ("customer","problem") else ""}></label>' for k in FIELDS) + '''</div><button>Create ticket</button></form>
-<p><a href="/export.csv">Export ticket and settlement report (CSV)</a> · <a href="/health">Health</a></p></div>
-<div class="panel" id="parts"><h2>Supplier parts catalogue — internal pricing only</h2><p>Paste a CSV provided by your supplier (supplier,sku,description,unit_cost, optional suggested_sale, currency, availability, checked_at, supplier_url). No invented prices or automatic customer quotes.</p>
-<form method="post" action="/parts/import"><label>Supplier CSV<textarea name="catalog" rows="6"></textarea></label><button type="submit">Import verified supplier data</button></form>
-<form method="post" action="/parts/fetch"><button class="secondary">Refresh authorized supplier feed</button></form>
-<p>Preferred suppliers: <a href="https://detroitaxle.com/parts" target="_blank" rel="noopener noreferrer">Detroit Axle parts catalogue</a> · <a href="https://www.autozonepro.com/" target="_blank" rel="noopener noreferrer">AutoZonePro commercial catalogue</a>. These are operator lookup links, not automatic price feeds. Use verified supplier exports or authorized feeds for automatic prices.</p><h3>Available supplier prices</h3><form method="get" action="/"><label>Search supplier, SKU, description<input name="partq" placeholder="e.g. starter"></label><button>Search parts</button></form><ul>''' + "".join(f'<li><b>{escape(x["supplier"])} / {escape(x["sku"])}</b> — {escape(x["description"])} · cost ${escape(x["unit_cost"])} · suggested sale {escape(x["suggested_sale"]) or "not supplied"} · {escape(x["availability"])} · checked {escape(x["checked_at"])}</li>' for x in catalog) + '''</ul></div>
-<h2>Ticket log</h2>''' + "".join(items) + '''</main><footer>INTERNAL ESTIMATE ONLY — mechanic reviews and phones customer with any proposed price. Never sent or offered automatically. Supplier prices require verified vendor feed. 15% applies to finalized bill before expenses.</footer></body></html>'''
+def erp_status():
+    """Check actual installed BlueSeer API reachability without a write action."""
+    url="http://127.0.0.1:8088/bsapi/authServ"
+    configured=all(os.getenv(key,"").strip() for key in blue_bridge.REQUIRED)
+    try:
+        with urllib.request.urlopen(url,timeout=0.7) as response:
+            reachable=response.status in (200,401)
+    except urllib.error.HTTPError as e:
+        reachable=e.code==401
+    except (OSError,ValueError):
+        reachable=False
+    return {"running":reachable,"configured":configured}
+
+def system_status():
+    return {"mailbox":bool(IMAP_USER and IMAP_PASSWORD),
+            "report":bool(os.getenv("ABD_OWNER_REPORT_TO") and
+                (os.getenv("ABD_REPORT_SMTP_APP_PASSWORD") or IMAP_PASSWORD)),
+            "erp":erp_status()}
+
+def render(rows,catalog=None):
+    return shop_ui.render(rows,catalog or [],db,amounts,system_status())
 
 class Handler(BaseHTTPRequestHandler):
     def response_headers(self,code=200,typ="text/html; charset=utf-8"):
@@ -652,7 +596,7 @@ class Handler(BaseHTTPRequestHandler):
                 catalog=parts.search(con,partq[:100],limit=100) if partq else con.execute("SELECT * FROM supplier_parts ORDER BY checked_at DESC LIMIT 100").fetchall()
             return self.response_text(render(rows,catalog))
         if path=="/health":
-            return self.response_text(json.dumps({"ok":True,"database":str(DB),"mailbox_configured":bool(IMAP_USER and IMAP_PASSWORD)}),typ="application/json")
+            return self.response_text(json.dumps({"ok":True,"database":str(DB),"connections":system_status()}),typ="application/json")
         if path=="/export.csv":
             with db() as con:rows=con.execute("SELECT * FROM tickets ORDER BY id").fetchall()
             data=io.StringIO();writer=csv.writer(data)
