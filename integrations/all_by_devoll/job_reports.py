@@ -87,7 +87,7 @@ def queue_report(con,ticket_id):
         ON CONFLICT(ticket_id) DO NOTHING""",(ticket_id,))
 
 def report_text(ticket,record,settlement):
-    def money(n):return f"\${Decimal(str(n)):,.2f}"
+    def money(n):return f"${Decimal(str(n)):,.2f}"
     def h(label,value):return f"{label}: {value}"
     lines=[
         "ALL BY DEVOLL — COMPLETED JOB REPORT",
