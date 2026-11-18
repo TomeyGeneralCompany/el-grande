@@ -1,6 +1,6 @@
 # All by Devoll — Friday launch desk
 
-This is a self-contained, Python-standard-library service-request intake and operator quote console for **All by Devoll, LLC**, housed in the El Grande repository. It runs **alongside** BlueSeer ERP 8.0; it does not change BlueSeer's upstream database schema or pretend to have posted BlueSeer invoices.
+This is a Python-standard-library service-request intake and **operator-only preliminary estimation** console for All by Devoll, LLC. It runs alongside BlueSeer ERP 8.0, with authenticated native customer, quote, service-order and guarded AR/GL invoice adapters. Estimates are internal only; the mechanic calls the customer himself.
 
 ## Friday launch path: website email -> ticket desk
 
@@ -69,9 +69,10 @@ User services normally run while logged in. To run while logged out, an administ
 
 ## Accounting and quoting behavior
 
-An editable draft quote uses:
+An editable **operator-only draft estimate** uses:
 
-```quoted_labor = labor_hours * customer_hourly_rate
+```
+quoted_labor = labor_hours * customer_hourly_rate
 quoted_bill = quoted_labor + parts_charged + travel_charged + extras
 ```
 
@@ -81,7 +82,8 @@ After finalization, the operator can mark the invoice as paid. That is a manual 
 
 When the operator finalizes the actual customer bill, the desk saves the amount and fixes the settlement:
 
-```TomeyGeneral = round_to_cents(final_bill * 0.15)
+```
+TomeyGeneral = round_to_cents(final_bill * 0.15)
 Operator = final_bill - TomeyGeneral
 ```
 
@@ -91,9 +93,9 @@ The desk is not a payment processor or general-ledger application. Marking a tic
 
 ## What is included and what is not
 
-**Included:** persistent tickets, IMAP mailbox polling, email parsing and deduplication, telephone/walk-in ticket creation, status log, manual labor/parts/travel estimates, optional Qwen diagnostic draft, finalized bill lock, 15% off-the-top settlements, operator share, CSV export, basic password authentication, local-only default bind, test suite.
+**Implemented in code:** email-to-ticket intake, permanent local record and status log; operator-only Qwen notes, labor and internal pricing estimates, approved supplier CSV/HTTPS-feed parts catalogue with source dates and searchable SKUs, 15%-off-the-entire-final-bill settlement, native BlueSeer customer/ship-to creation, quotes and service orders, and guarded native shipment-based AR/GL invoicing.
 
-**Not included yet:** automatic posting of service-order and quote records into BlueSeer's `ordData` schema, inventory/parts supplier lookups, payment capture, self-hosted website ticket endpoint, and customer email or SMS quoting. The existing BlueSeer service-order functions `addServiceOrderTransaction` and `addQuoteTransaction` have been inspected, but their object mappings and authentication must be qualified before live postings. This desk is the immediately deployable ticket/quoting intake that supplies reliable data for that next adapter.
+**Not automatically active without deployment configuration:** Gmail mailbox import; access to a running BlueSeer 8.0 server and configured item/account/customer masters; a real supplier-provided feed; or native invoicing. These require external credentials and live qualification. The native invoice path is disabled by default. Marking paid is an operator attestation, not verified bank payment or a BlueSeer AR payment posting. No automated outbound customer quotes or SMS are included, by design.
 
 ## Verification
 
@@ -112,4 +114,65 @@ For backups, stop the service or use SQLite's online backup API so that the WAL 
 - `test_desk.py`: unit tests
 - `../../.github/workflows/all-by-devoll-desk.yml`: source compilation and test checks
 
-BlueSeer upstream code and its MIT license remain unchanged.
+BlueSeer's MIT license remains unchanged. A narrow hardening change to the upstream authServ.java removes raw password and session IDs from login diagnostics.
+
+
+## Internal-only pricing and supplier configuration
+
+The mechanic sees the preliminary estimate BEFORE he calls the customer. There is deliberately no automatic outbound quote or customer notification. The final bill is separate and its 15%/85% division is fixed by exact-cent arithmetic.
+
+Import an authorized vendor CSV through the supplier catalogue panel. Required columns are: supplier,sku,description,unit_cost. Optional columns: suggested_sale,currency,availability,checked_at,supplier_url. USD is currently supported. Prices are source-stamped, and parts must be selected by exact supplier and SKU; the mechanic still verifies vehicle fitment. Missing supplier data is never made up.
+
+An authorized JSON or CSV HTTPS feed can be configured in the protected systemd EnvironmentFile with these names:
+
+    ABD_PARTS_FEED_URL=https://supplier.example/authorized/prices
+    ABD_PARTS_FEED_HOST=supplier.example
+    ABD_PARTS_FEED_TOKEN=YOUR_SUPPLIER_TOKEN
+    ABD_PARTS_MARKUP_PERCENT=0
+    ABD_PARTS_POLL_SECONDS=3600
+
+The example URL is a placeholder, not a live supplier. The feed must return JSON as a list of part objects (or an object with a parts array) or an equivalent CSV. Redirects are refused; TLS is verified.
+
+## BlueSeer 8.0 native API configuration
+
+The bridge calls the existing /bsapi/authServ, dataServCUS, dataServORD, dataServSHP and dataServOV operations, NOT direct database writes. BlueSeer must have its server running and valid items, site, terms and AR accounts configured. Add these to a protected desk.env file (never commit actual credentials):
+
+    ABD_BLUESEER_URL=http://127.0.0.1:8080/bsapi
+    ABD_BLUESEER_USER=YOUR_BLUESEER_USER
+    ABD_BLUESEER_PASSWORD=YOUR_BLUESEER_PASSWORD
+    ABD_BLUESEER_SITE=YOUR_SITE
+    ABD_BLUESEER_CURRENCY=USD
+    ABD_BLUESEER_TERMS=YOUR_TERMS
+    ABD_BLUESEER_AR_ACCOUNT=YOUR_VALID_AR_ACCOUNT
+    ABD_BLUESEER_LABOR_ITEM=YOUR_LABOR_ITEM
+    ABD_BLUESEER_PARTS_ITEM=YOUR_PARTS_ITEM
+    ABD_BLUESEER_TRAVEL_ITEM=YOUR_TRAVEL_ITEM
+    ABD_BLUESEER_MISC_ITEM=YOUR_MISC_ITEM
+    ABD_BLUESEER_SERVICE_TYPE=quote
+    ABD_BLUESEER_ENABLE_LIVE_INVOICES=no
+
+Use actual configured BlueSeer codes. For an API on a remote host, the adapter requires HTTPS; loopback HTTP alone is allowed.
+
+### Mechanic's workflow
+
+1. FormSubmit still routes website requests to the business Gmail mailbox. The desk imports messages and assigns permanent ticket IDs. The website remains unchanged.
+2. Qwen provides optional diagnostic notes and rough labor ranges; the mechanic selects verified supplier parts, enters labor hours/rate, reviews the INTERNAL estimate and calls the customer to negotiate/confirm the real quote.
+3. Click Create/reuse native BlueSeer customer. This posts an actual customer and ship-to record under the configured AR account (or reuses matching local name+phone records).
+4. Click Save internal draft to BlueSeer quote and Create BlueSeer service order. Both are real, authenticated native BlueSeer transaction calls; existing records must match customer and line totals.
+5. Once the job is done, finalize the ENTIRE customer bill; Tomey General receives 15% of that amount before any parts, labor expense, fuel or other deduction. The operator receives the remaining 85%.
+6. After a real test on a disposable BlueSeer instance, set ABD_BLUESEER_ENABLE_LIVE_INVOICES=yes and use the native invoice button. It uses BlueSeer's genuine shipper number, creates shipment rows and executes the existing serviceorder shipper confirmation, which posts AR/GL. It refuses any mismatched final bill and does not automatically retry an uncertain financial action.
+7. Paid status can be recorded for internal tracking, but bank confirmation and native AR payment posting remain independent tasks.
+
+Once native quote/service-order records are synchronized, amount-bearing fields are locked in the sidecar against silent divergence. Corrections require native amendment and reconciliation.
+
+## Before production activation
+
+Verify the actual Gmail message format and deduplication, source-stamped vendor price feed, correct BlueSeer site/customer/ship-to and item masters, customer and service order creation, native accounting postings in a test database, invoice reconciliation, restart behavior and backup restoration. No credentials or real supplier rates are bundled in this repository.
+
+## Files added
+
+- parts.py: validated supplier price feed and ticket parts records
+- blue_bridge.py: authenticated BlueSeer 8.0 quote and service-order transaction adapter
+- customer_bridge.py: native BlueSeer customer and ship-to creation
+- invoice_bridge.py: guarded native shipper-to-AR/GL invoicing
+- test_integrations.py: supplier, native adapter and accounting mock checks
