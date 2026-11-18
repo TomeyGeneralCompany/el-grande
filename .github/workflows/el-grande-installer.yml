@@ -34,6 +34,8 @@ jobs:
           java-version: '17'
       - name: Build full BlueSeer Java classes
         run: bash packaging/build-java.sh
+      - name: Smoke-test bundled local BlueSeer API
+        run: bash packaging/smoke-java-api.sh
       - name: Package and inspect .deb
         run: |
           bash packaging/build-deb.sh 0.1.0
