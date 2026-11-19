@@ -44,7 +44,7 @@ class MavisThemeTests(unittest.TestCase):
             "erp":{"running":False,"configured":False}})
         self.assertIn("ALL BY DEVOLL",output)
         self.assertIn('href="/bank"',output)
-        self.assertIn("--panel-teal:#00c4bf",output)
+        self.assertIn("--panel-teal: #00c4bf",output)
         self.assertIn("background:#c90028",output)
         self.assertIn("Cash received today",output)
         self.assertIn("New service request",output)
@@ -54,23 +54,23 @@ class MavisThemeTests(unittest.TestCase):
             output=bank_ui.page(con,False)
         self.assertIn("Count cash in the safe",output)
         self.assertIn("Transfer / cash deposit",output)
-        self.assertIn("--panel-teal:#00c4bf",output)
+        self.assertIn("--panel-teal: #00c4bf",output)
         self.assertIn("background:#c90028",output)
         self.assertIn("Recorded register balance",output)
 
     def test_settings_uses_same_mavis_style_without_secret_reflection(self):
         with patch.object(bank_connect,"ready",return_value=(False,"sandbox")):
             output=office_settings.page({"ABD_IMAP_APP_PASSWORD":"TOPSECRET"},"saved")
-        self.assertIn("Add Gmail connection",output)
+        self.assertIn("Gmail configured",output)
         self.assertIn("Add bank account",output)
-        self.assertIn("--panel-teal:#00c4bf",output)
+        self.assertIn("--panel-teal: #00c4bf",output)
         self.assertNotIn("TOPSECRET",output)
 
     def test_bank_link_keeps_plaid_authorization_and_mavis_style(self):
         output=bank_connect.connection_page("mock-link-token","testnonce")
         self.assertIn("Plaid.create",output)
         self.assertIn("mock-link-token",output)
-        self.assertIn("--panel-teal:#00c4bf",output)
+        self.assertIn("--panel-teal: #00c4bf",output)
         self.assertIn("background:#c90028",output)
 
 if __name__=="__main__":
