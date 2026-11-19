@@ -25,7 +25,7 @@ def existing():
     return values
 
 def save(payload):
-    """Update email fields in protected service file without destroying ERP config."""
+    """Update email fields while preserving other settings in the protected service file."""
     old=existing()
     updates={}
     for key in EDITABLE:
@@ -173,7 +173,5 @@ border-radius:9px;color:white;font-weight:700;list-style:none;display:inline-blo
 <button type="submit">Save provider connection</button></form></details>
 <p><a href="/bank">Open money ledger and bank connections</a></p>
 </section>
-<section><h2>Records</h2>
-<p><a href="/reports/legacy.csv">Download imported accounting and transaction history</a></p>
-</section></main></body></html>"""
+</main></body></html>"""
     return page_html.replace("</style>","</style><style>"+mavis_theme.CSS+"</style>")

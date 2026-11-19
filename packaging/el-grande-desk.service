@@ -1,7 +1,6 @@
 [Unit]
 Description=El Grande — All by Devoll Job Desk
-Conflicts=el-grande-api.service el-grande-erp-setup.service
-After=network-online.target el-grande-api.service el-grande-erp-setup.service
+After=network-online.target
 Wants=network-online.target
 
 [Service]

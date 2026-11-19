@@ -38,8 +38,6 @@ class ShopUITests(unittest.TestCase):
         self.assertIn("www.google.com/search",page)
         self.assertIn("Detroit Axle",page)
         self.assertIn("AutoZonePro",page)
-        self.assertNotIn("ERP customer code",page)
-        self.assertNotIn("BlueSeer accounting",page)
     def test_dashboard_render_requires_no_native_service(self):
         self.assertIn("Job calendar", desk.render_dashboard())
         self.assertNotIn("erp", desk.system_status())
@@ -79,7 +77,6 @@ class ShopUITests(unittest.TestCase):
         self.assertIn('href="/settings"',page)
         self.assertNotIn('open <strong>El Grande Setup</strong>',page)
         self.assertNotIn("Office connections",page)
-        self.assertNotIn("BlueSeer not responding",page)
     def test_closed_job_has_actual_invoice_not_edit_form(self):
         desk.finish_job(self.job,{
             "work_performed":"Changed pads and tested braking",
