@@ -189,35 +189,20 @@ def render(rows,catalog,db,amounts,system=None):
                     ('<pre class="ai">'+esc(ticket["ai_notes"])+'</pre>' if ticket["ai_notes"] else '')+'</div></section>')
             inner.append('<div class="working">'+left+right+'</div>')
             completedform=('<section class="worksection" id="finish-'+str(n)+'"><h3>Finish this job</h3>'
-              '<p class="muted">Record the work performed and the actual bill when the job is finished.</p>'
+              '<p class="muted">Enter the completed work and the final price. El Grande will prepare the PDF invoice.</p>'
               '<form method="post" action="/ticket/'+str(n)+'/complete">'
-              '<label>Work performed<textarea name="work_performed" required placeholder="Repairs completed, parts installed, tests performed">'+esc(ticket["notes"])+'</textarea></label>'
-              '<div class="fields">'+field("started_at","Started",kind="datetime-local")+
-              field("finished_at","Finished",kind="datetime-local")+
-              field("actual_hours","Hours worked",ticket["labor_hours"],"number",step=".01")+
-              field("actual_labor_cost","Actual labor cost ($)","0","number",step=".01")+
-              field("actual_parts_cost","Actual parts cost ($)",ticket["parts_cost"],"number",step=".01")+
-              field("actual_other_cost","Other expenses ($)","0","number",step=".01")+
-              field("actual_invoice","Final customer bill ($)",f'{a["total"]:.2f}',"number",required=True,step=".01")+
-              '</div><h3>Customer paid now? (optional)</h3>'
-              '<p class="small muted">If unpaid, leave the amount blank. Cash is the default.</p>'
-              '<div class="fields">'+field("amount_received","Cash handed over ($)","", "number",step=".01")+
-              field("paid_on","Payment date",date.today().isoformat(),"date")+
-              '</div><input type="hidden" name="method" value="cash">'
-              '<div class="footactions">'+button("Save completed job","action danger")+'</div></form></section>')
+              '<label>Work performed<textarea name="work_performed" required placeholder="Repair completed, parts installed, work performed">'+esc(ticket["notes"])+'</textarea></label>'
+              +field("actual_invoice","Final customer bill ($)",format(a["total"],".2f"),"number",required=True,step=".01")
+              +'<details class="inner"><summary>Optional: hours and actual job expenses</summary><div class="fields">'
+              +field("started_at","Started",kind="datetime-local")
+              +field("finished_at","Finished",kind="datetime-local")
+              +field("actual_hours","Hours worked",ticket["labor_hours"],"number",step=".01")
+              +field("actual_labor_cost","Actual labor cost ($)","0","number",step=".01")
+              +field("actual_parts_cost","Actual parts cost ($)",ticket["parts_cost"],"number",step=".01")
+              +field("actual_other_cost","Other expenses ($)","0","number",step=".01")
+              +'</div></details>'
+              +'<div class="footactions">'+button("Finish Job & Create Invoice","action danger")+'</div></form></section>')
             inner.append(completedform)
-            native_html='<details class="inner"><summary>BlueSeer accounting</summary>'
-            if sync:
-                native_html+='<p class="small muted">'+esc(", ".join(x["kind"]+": "+x["state"] for x in sync))+'</p>'
-            native_html+='<p class="small muted">BlueSeer customer and service-order records synchronize after job completion.</p>'
-            native_html+='<form method="post" action="/ticket/'+str(n)+'/update">'
-            native_html+=field("blue_customer","ERP customer code",ticket["blue_customer"])
-            native_html+=field("blue_ship_to","ERP ship-to code",ticket["blue_ship_to"])
-            native_html+=button("Save account codes","action secondary")+'</form>'
-            native_html+=('<div class="footactions">'+postform('/ticket/'+str(n)+'/blue-customer',"Create customer","action secondary")
-                          +postform('/ticket/'+str(n)+'/blue-quote',"Save ERP quote","action secondary")
-                          +postform('/ticket/'+str(n)+'/blue-order',"Create service order","action secondary")+'</div></details>')
-            inner.append(native_html)
         else:
             if completed:
                 inner.append('<section class="worksection"><h3>Completed job</h3>'
@@ -233,25 +218,28 @@ def render(rows,catalog,db,amounts,system=None):
                 inner.append('<section class="worksection"><h3>Finalized job</h3><p>Invoice: $'+esc(ticket["bill_total"])+'</p></section>')
             method_labels={"cash":"Cash","check":"Check","card":"Card",
                            "bank_transfer":"Bank transfer","other":"Other"}
-            payment_html=('<section class="worksection"><h3>Customer payments</h3>'
-                          '<div class="jobinfo">'
-                          '<div><span>Final bill (tax included)</span><b>$'+format(paid_state["invoice"],",.2f")+'</b></div>'
-                          '<div><span>Received</span><b>$'+format(paid_state["received"],",.2f")+'</b></div>'
-                          '<div><span>Still owed</span><b>$'+format(paid_state["due"],",.2f")+'</b></div></div>')
+            payment_html=('<section class="worksection"><h3>Customer invoice</h3>'
+                '<p><a class="action" href="/ticket/'+str(n)+'/invoice.pdf" target="_blank" rel="noopener">View / print PDF invoice</a></p>'
+                '<div class="jobinfo">'
+                '<div><span>Invoice total</span><b>$'+format(paid_state["invoice"],",.2f")+'</b></div>'
+                '<div><span>Payment status</span><b>'+("Paid" if paid_state["due"]==0 else "Unpaid" if paid_state["received"]==0 else "Partly paid")+'</b></div>'
+                '<div><span>Still owed</span><b>$'+format(paid_state["due"],",.2f")+'</b></div></div>')
             if paid_state["due"]>0:
+                payment_html+=(postform('/ticket/'+str(n)+'/pay-in-full',"Mark Paid","action")
+                    +'<p class="small muted">Records the remaining amount received in cash today.</p>')
                 choices=''.join('<option value="'+esc(k)+'"'+(' selected' if k=="cash" else '')+'>'+v+'</option>' for k,v in method_labels.items())
-                payment_html+=('<form method="post" action="/ticket/'+str(n)+'/payment">'
+                payment_html+=('<details class="inner"><summary>Record partial payment or another payment method</summary>'
+                    '<form method="post" action="/ticket/'+str(n)+'/payment">'
                     '<div class="fields">'
-                    +field("amount_received","Amount customer handed over ($)",format(paid_state["due"],".2f"),"number",required=True,step=".01")
+                    +field("amount_received","Amount received ($)",format(paid_state["due"],".2f"),"number",required=True,step=".01")
                     +'<label>Payment method<select name="method">'+choices+'</select></label>'
                     +field("paid_on","Date paid",date.today().isoformat(),"date")
                     +field("reference","Check / transaction reference (optional)")
-                    +'</div>'+button("Record payment")+'</form>'
-                    '<p class="small muted">With cash, enter the amount handed over. Excess is recorded as change returned.</p>')
+                    +'</div>'+button("Record payment")+'</form></details>')
             else:
                 payment_html+='<p class="pill done">Paid in full</p>'
             if receipts:
-                payment_html+='<h3>Payment history</h3><ul class="list">'
+                payment_html+='<details class="inner"><summary>Payment history</summary><ul class="list">'
                 for receipt in receipts:
                     detail=('$'+esc(receipt["applied"])+' applied · '+esc(method_labels.get(receipt["method"],receipt["method"]))
                             +' · '+esc(receipt["paid_on"]))
@@ -269,7 +257,7 @@ def render(rows,catalog,db,amounts,system=None):
                            +field("reason","Reason for voiding",required=True)
                            +button("Void payment entry","action secondary")+'</form></details>')
                     payment_html+='</li>'
-                payment_html+='</ul>'
+                payment_html+='</ul></details>'
             payment_html+='</section>'
             inner.append(payment_html)
         items.append('<details class="ticket" id="ticket-'+str(n)+'">'+jobheader+

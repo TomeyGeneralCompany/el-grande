@@ -2,7 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT="$PWD"
-VERS="${1:-0.6.0}"
+VERS="${1:-0.7.0}"
 OUT="$ROOT/artifacts"
 PKG="$ROOT/build/el-grande-package"
 rm -rf "$PKG"
@@ -24,7 +24,7 @@ Section: office
 Priority: optional
 Architecture: all
 Maintainer: Tomey General Company <noreply@github.com>
-Depends: python3 (>= 3.10), python3-tk, default-jre | openjdk-17-jre | openjdk-21-jre
+Depends: python3 (>= 3.10), python3-tk, python3-reportlab, default-jre | openjdk-17-jre | openjdk-21-jre
 Description: All by Devoll local job desk and BlueSeer ERP runtime
  Operator-only ticket dashboard, job reporting, local SQLite storage,
  and bundled BlueSeer classes and resources. First-run desktop setup.
