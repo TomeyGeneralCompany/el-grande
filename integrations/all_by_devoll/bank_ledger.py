@@ -175,3 +175,29 @@ def imported(con,account_id,provider,transaction):
 def feed(con,account_id,limit=100):
     return con.execute("""SELECT * FROM bank_feed WHERE account_id=?
        ORDER BY entry_date DESC,id DESC LIMIT ?""",(account_id,limit)).fetchall()
+
+def feed_record(con,feed_id):
+    item=con.execute("SELECT * FROM bank_feed WHERE id=?",(feed_id,)).fetchone()
+    if not item:raise LookupError("Imported bank transaction not found")
+    if item["linked_entry_id"]:raise ValueError("This bank transaction is already recorded")
+    # Pending transactions may disappear or change; wait for a finalized record.
+    if item["pending"]:raise ValueError("Wait until the bank transaction is posted")
+    n=int(item["amount_cents"])
+    if not n:raise ValueError("Zero dollar transaction")
+    id_=entry(con,int(item["account_id"]),item["entry_date"],n,
+              "bank_receipt" if n>0 else "bank_expense",item["description"],
+              source="bank_import",source_key=item["external_id"])
+    con.execute("UPDATE bank_feed SET linked_entry_id=? WHERE id=?",(id_,feed_id))
+    return id_
+def feed_match(con,feed_id,entry_id):
+    item=con.execute("SELECT * FROM bank_feed WHERE id=?",(feed_id,)).fetchone()
+    target=con.execute("SELECT * FROM money_entries WHERE id=?",(entry_id,)).fetchone()
+    if not item or not target:raise LookupError("Imported bank activity or register entry not found")
+    if item["linked_entry_id"]:raise ValueError("That bank transaction is already matched")
+    if item["pending"]:raise ValueError("Wait until the bank posts this transaction")
+    if item["account_id"]!=target["account_id"] or item["amount_cents"]!=target["amount_cents"]:
+        raise ValueError("The selected register entry must match account and amount")
+    prior=con.execute("SELECT id FROM bank_feed WHERE linked_entry_id=?",(entry_id,)).fetchone()
+    if prior:raise ValueError("This register entry already has a bank match")
+    con.execute("UPDATE bank_feed SET linked_entry_id=? WHERE id=?",(entry_id,feed_id))
+    return entry_id
