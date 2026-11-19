@@ -9,6 +9,7 @@ from collections import Counter
 from decimal import Decimal
 from urllib.parse import urlencode
 
+import mavis_theme
 import job_reports
 import customer_payments
 from datetime import date
@@ -78,6 +79,8 @@ footer{border-top:1px solid var(--line);padding:20px 0;color:var(--muted);font-s
 .intro{display:block}.intro .action{margin-top:15px}.panel{padding:14px}.ticket>summary{padding:12px}.jobid{display:none}.jobright{gap:8px}.jobname{font-size:14px}.subline{max-width:190px}
 nav .wrap{gap:18px}.jobbody{padding:0 12px 14px}}
 """
+
+CSS += mavis_theme.CSS
 
 def field(name, title, value="",kind="text",required=False,placeholder="",step=None):
     stepattr= ' step="'+esc(step)+'"' if step else ""
