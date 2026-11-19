@@ -608,7 +608,7 @@ class Handler(BaseHTTPRequestHandler):
     def response_headers(self,code=200,typ="text/html; charset=utf-8",csp=None):
         self.send_response(code);self.send_header("Content-Type",typ)
         self.send_header("Cache-Control","no-store");self.send_header("X-Content-Type-Options","nosniff")
-        self.send_header("Content-Security-Policy",csp or "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
+        self.send_header("Content-Security-Policy",csp or "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
         self.send_header("X-Frame-Options","DENY");self.end_headers()
     def auth(self):
         # A single-machine installation should open on localhost without a login.
@@ -631,6 +631,13 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if not self.auth():return
         path=urlsplit(self.path).path
+        if path in ("/brand/tomey.png","/brand/devoll.png"):
+            asset=Path(__file__).resolve().parent/"brand"/path.rsplit("/",1)[-1]
+            if not asset.is_file():
+                return self.response_text("Brand image missing",404,"text/plain")
+            self.response_headers(200,"image/png")
+            self.wfile.write(asset.read_bytes())
+            return
         if path=="/":
             searchparams=parse_qs(urlsplit(self.path).query)
             if searchparams.get("googlepart",[""])[0].strip():
