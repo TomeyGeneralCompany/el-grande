@@ -69,14 +69,20 @@ class InvoicePdfTests(unittest.TestCase):
         page=shop_ui.render(rows,[],desk.db,desk.amounts)
         self.assertIn("invoice.pdf",page)
         self.assertIn("View / print PDF invoice",page)
-        self.assertIn("Mark invoice paid (cash)",page)
+        self.assertIn("Mark Paid",page)
         self.assertIn("Unpaid",page)
         desk.pay_invoice_in_full(self.id)
         with desk.db() as con:
             rows=con.execute("SELECT * FROM tickets").fetchall()
         page=shop_ui.render(rows,[],desk.db,desk.amounts)
         self.assertIn("Paid in full",page)
-        self.assertNotIn("Mark invoice paid (cash)",page)
+        self.assertNotIn("Mark Paid",page)
+    def test_pdf_available_for_legacy_finalized_job(self):
+        desk.finalize_ticket(self.id,"400")
+        with desk.db() as con:
+            ticket=con.execute("SELECT * FROM tickets WHERE id=?",(self.id,)).fetchone()
+        filepath=invoice_pdf.create(ticket,None)
+        self.assertTrue(filepath.read_bytes().startswith(b"%PDF-"))
     def test_no_pdf_for_unfinished_job(self):
         with desk.db() as con:
             ticket=con.execute("SELECT * FROM tickets").fetchone()
