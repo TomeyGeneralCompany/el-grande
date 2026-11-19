@@ -100,7 +100,6 @@ def record(con,ticket_id,data):
         "Payment #"+str(cursor.lastrowid)+": "+method+"; applied $"+str(applied)+
         "; change $"+str(change)+"; on "+paid_on))
     erp_receipts.queue_payment(con,cursor.lastrowid)
-    bank_ledger.init(con)
     p=con.execute("SELECT * FROM customer_payments WHERE id=?",(cursor.lastrowid,)).fetchone()
     bank_ledger.import_payment(con,p)
     state=_refresh_status(con,ticket_id)
@@ -118,5 +117,6 @@ def void(con,ticket_id,payment_id,reason):
     con.execute("INSERT INTO events(ticket_id,timestamp,event,detail) VALUES(?,?,?,?)",
                 (ticket_id,now,"payment_voided","Payment #"+str(payment_id)+": "+reason))
     erp_receipts.queue_void(con,payment_id)
-    bank_ledger.init(con)
+    p=con.execute('SELECT * FROM customer_payments WHERE id=?',(payment_id,)).fetchone()
+    bank_ledger.import_payment(con,p)
     return _refresh_status(con,ticket_id)
