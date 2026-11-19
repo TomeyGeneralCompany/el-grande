@@ -143,7 +143,7 @@ class BlueSeerTests(unittest.TestCase):
  def test_native_records_are_valid_and_internal_only(self):
     with patch.dict(os.environ,{"ABD_BLUESEER_TRAVEL_ITEM":"TRAVEL"}):
         payload=blue_bridge.build_payloads(self.ticket,self.math)
-    self.assertEqual(payload["key"],"ABD000007")
+    self.assertEqual(payload["key"],"900000007")
     self.assertEqual(payload["line_total"],Decimal("350.0"))
     detail,master,empty=payload["service_order"].split("=_=")
     import json
@@ -176,7 +176,7 @@ class BlueSeerTests(unittest.TestCase):
                 return [{"quod_qty":2,"quod_netprice":85},
                         {"quod_qty":1,"quod_netprice":140},
                         {"quod_qty":1,"quod_netprice":40}]
-            return {"quo_nbr":"ABD000007","quo_cust":"TEST_CUST"}
+            return {"quo_nbr":"900000007","quo_cust":"TEST_CUST"}
         def post(self,*args):
             self.calls.append(("post",args))
             return ["0","created"]
@@ -238,7 +238,7 @@ class CustomerAndAccountingTests(unittest.TestCase):
     detail,master,tree=payload.split("=_=")
     lines=json.loads(detail);hdr=json.loads(master)
     self.assertEqual(hdr["sh_id"],"917")
-    self.assertEqual(hdr["sh_so"],"ABD000007")
+    self.assertEqual(hdr["sh_so"],"900000007")
     self.assertEqual(hdr["sh_ar_acct"],"1100")
     self.assertEqual(sum(Decimal(str(p["shd_qty"]))*Decimal(str(p["shd_netprice"])) for p in lines),Decimal("350"))
     self.assertEqual(json.loads(tree),[])
@@ -253,7 +253,7 @@ class CustomerAndAccountingTests(unittest.TestCase):
     class Client:
         def __init__(self):self.actions=[]
         def get(self,resource,action,ident):
-            if action=="getServiceOrderMstr":return {"sv_nbr":"ABD000007","sv_cust":"ABD000007"}
+            if action=="getServiceOrderMstr":return {"sv_nbr":"900000007","sv_cust":"ABD000007"}
             if action=="getServiceOrderDet":return [{"svd_qty":2,"svd_netprice":85},{"svd_qty":1,"svd_netprice":140},{"svd_qty":1,"svd_netprice":40}]
             if action=="getCustMstr":return {"cm_code":"ABD000007","cm_curr":"USD","cm_ar_acct":"1100"}
             if action=="getShipMstr":return {"sh_id":"917"}
@@ -269,7 +269,7 @@ class CustomerAndAccountingTests(unittest.TestCase):
         def __init__(self):self.calls=[]
         def get(self,resource,action,ident):
             self.calls.append(action)
-            if action=="getServiceOrderMstr":return {"sv_nbr":"ABD000007","sv_cust":"ABD000007"}
+            if action=="getServiceOrderMstr":return {"sv_nbr":"900000007","sv_cust":"ABD000007"}
             if action=="getServiceOrderDet":return [{"svd_qty":2,"svd_netprice":85},{"svd_qty":1,"svd_netprice":140},{"svd_qty":1,"svd_netprice":40}]
             if action=="getCustMstr":return {"cm_code":"ABD000007","cm_curr":"USD","cm_ar_acct":"1100"}
             if action=="getShipMstr":return None
