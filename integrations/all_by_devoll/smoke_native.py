@@ -91,6 +91,13 @@ def main():
     restored,_=erp_receipts.native_ar(client,shipper)
     print("Native AR open after receipt reversal:",restored["ar_open_amt"])
     assert abs(float(restored["ar_open_amt"])-375.25)<0.01,restored
-    print("Native cash receipt, AR settlement, GL and reversal PASS")
+    full=dict(receipt,id=950002,applied="375.25")
+    full_id=erp_receipts.post(client,full,shipper,cust,"BK","payment")
+    assert full_id=="700950002"
+    closed,_=erp_receipts.native_ar(client,shipper)
+    print("Native AR open after final full payment:",closed["ar_open_amt"])
+    assert abs(float(closed["ar_open_amt"]))<0.01,closed
+    assert closed["ar_status"]=="c",closed
+    print("Native cash receipt, partial/full AR settlement, GL and reversal PASS")
 
 if __name__=="__main__":main()
