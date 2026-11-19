@@ -134,6 +134,25 @@ def service_item_payload(code,description,site):
         r[key]=float(r[key] or 0)
     return r
 
+def configure_shop_site(client,site):
+    """Replace the untouched upstream sample business label, not user data."""
+    import json
+    current=client.get("dataServADM","getSiteMstr",site)
+    if not isinstance(current,dict) or current.get("site_site")!=site:
+        raise ValueError("BlueSeer site cannot be read")
+    if current.get("site_desc")=="All by Devoll":
+        return "existing"
+    if current.get("site_desc")!="MFG Company":
+        return "unchanged"  # A configured business is never overwritten.
+    current=dict(current)
+    current.update(site_desc="All by Devoll",
+                   site_city="Manistee",site_state="MI",site_country="USA")
+    client.post("dataServADM","updateSiteMstr",json.dumps(current))
+    latest=client.get("dataServADM","getSiteMstr",site)
+    if not isinstance(latest,dict) or latest.get("site_desc")!="All by Devoll":
+        raise ValueError("BlueSeer did not confirm the shop business name")
+    return "updated"
+
 def ensure_service_item(client,code,description,site):
     existing=client.get("dataServINV","getItemMstr",code)
     if isinstance(existing,dict) and existing.get("it_item")==code:
@@ -178,6 +197,7 @@ def configure(path=ERP_DB,envpath=ENV,client_factory=blue_bridge.BlueSeerClient)
         with sqlite3.connect("file:"+str(path)+"?mode=ro",uri=True) as con:
             if not has_value(con,"site_mstr",site):
                 raise ValueError("Existing BlueSeer site code does not exist")
+    configure_shop_site(client,site)
     for envkey,(code,description) in SERVICE_ITEMS.items():
         desired=settings.get(envkey) or code
         if desired!=code:
