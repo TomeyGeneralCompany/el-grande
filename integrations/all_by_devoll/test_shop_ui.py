@@ -37,11 +37,13 @@ class ShopUITests(unittest.TestCase):
         for label in ('name="labor_hours"','name="parts_cost"','name="work_performed"',
                       'name="actual_labor_cost"','name="actual_parts_cost"',
                       'name="actual_hours"','name="actual_invoice"',
-                      "Save estimate","Finish Job &amp; Create Invoice","Create service order"):
+                      "Save estimate","Finish Job &amp; Create Invoice"):
             self.assertIn(label,page)
         self.assertIn("www.google.com/search",page)
         self.assertIn("Detroit Axle",page)
         self.assertIn("AutoZonePro",page)
+        self.assertNotIn("ERP customer code",page)
+        self.assertNotIn("BlueSeer accounting",page)
     def test_customer_data_is_escaped(self):
         _,_=desk.create_ticket({"customer":"<script>alert(1)</script>"},
             "manual:escape-ui-test")
