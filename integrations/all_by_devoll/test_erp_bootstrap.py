@@ -40,13 +40,18 @@ class Fixture(unittest.TestCase):
             def __init__(self,base,user,password):
                 self.base=base;self.user=user;self.password=password
                 self.items={}
+                self.site={"site_site":"1000","site_desc":"MFG Company","site_city":"Dodge City"}
                 sessions.append(self)
             def authenticate(self):return "session"
             def get(self,res,action,key):
+                if action=="getSiteMstr":return self.site
                 return self.items.get(key,{})
             def post(self,res,action,body):
                 data=json.loads(body)
-                self.items[data["it_item"]]=data
+                if action=="updateSiteMstr":
+                    self.site=data
+                else:
+                    self.items[data["it_item"]]=data
                 return ["0","success"]
         result=erp_bootstrap.configure(self.db,self.env,FakeClient)
         self.assertTrue(result["connected"])
@@ -65,6 +70,7 @@ class Fixture(unittest.TestCase):
         self.assertEqual(settings["ABD_BLUESEER_ENABLE_LIVE_INVOICES"],"no")
         self.assertEqual(self.env.stat().st_mode & 0o777,0o600)
         self.assertEqual(len(sessions[0].items),4)
+        self.assertEqual(sessions[0].site["site_desc"],"All by Devoll")
     def test_refuse_failed_login_and_preserve_configuration(self):
         self.env.write_text("ABD_IMAP_USER=allbydevoll@gmail.com\n")
         before=self.env.read_text()
