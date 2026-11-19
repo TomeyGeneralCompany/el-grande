@@ -603,7 +603,7 @@ def system_status():
             "erp":erp_status()}
 
 def render(rows,catalog=None,calendar_month="",edit_appointment=""):
-    return shop_ui.render(rows,catalog or [],db,amounts,system_status(),calendar_month,edit_appointment)
+    return shop_ui.render(rows,catalog or [],db,amounts,calendar_month,edit_appointment)
 
 class Handler(BaseHTTPRequestHandler):
     def response_headers(self,code=200,typ="text/html; charset=utf-8",csp=None):

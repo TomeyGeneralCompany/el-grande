@@ -9,7 +9,9 @@ rm -rf "$PKG"
 mkdir -p "$PKG/DEBIAN" "$PKG/opt/el-grande/integrations/all_by_devoll" \
     "$PKG/opt/el-grande/packaging" "$PKG/opt/el-grande/java" \
     "$PKG/usr/share/applications" "$PKG/usr/lib/systemd/user" "$OUT"
-cp -a integrations/all_by_devoll/*.py "$PKG/opt/el-grande/integrations/all_by_devoll/"
+find integrations/all_by_devoll -maxdepth 1 -type f -name '*.py' \
+    ! -name 'test_*.py' ! -name 'smoke_native.py' \
+    -exec cp -a -t "$PKG/opt/el-grande/integrations/all_by_devoll/" {} +
 mkdir -p "$PKG/opt/el-grande/integrations/all_by_devoll/brand"
 cp -a integrations/all_by_devoll/brand/*.png "$PKG/opt/el-grande/integrations/all_by_devoll/brand/"
 cp -a packaging/el-grande-launcher.py "$PKG/opt/el-grande/packaging/"
@@ -18,7 +20,7 @@ cp -a packaging/el-grande-*.service "$PKG/usr/lib/systemd/user/"
 mkdir -p "$PKG/opt/el-grande/java/classes" "$PKG/opt/el-grande/java/lib"
 cp -a lib/*.jar "$PKG/opt/el-grande/java/lib/"
 cp -a build/java-classes/. "$PKG/opt/el-grande/java/classes/"
-cp -a sf/data "$PKG/opt/el-grande/java/data-template"
+install -D -m 0644 sf/data/en/bsdb.db "$PKG/opt/el-grande/java/data-template/en/bsdb.db"
 cat >"$PKG/DEBIAN/control" <<EOF
 Package: el-grande
 Version: $VERS

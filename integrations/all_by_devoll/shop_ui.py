@@ -100,32 +100,12 @@ def postform(url,caption,css="action"):
 def state_name(s):
     return str(s).replace("_"," ").title()
 
-def connection_status(config,erp):
-    if config["mailbox"]:
-        mail=('Business inbox configured','good')
-    else:mail=('Business inbox not connected','')
-    if config["report"]:
-        report=('Owner reports configured','good')
-    else:report=('Owner reports not connected','')
-    if erp["running"] and erp["configured"]:
-        erptext=('BlueSeer responding · settings entered','good')
-    elif erp["running"]:
-        erptext=('BlueSeer responding · setup needed','')
-    else:
-        erptext=('BlueSeer not responding','bad')
-    return '<div class="statusbar">'+''.join(
-        '<div class="status-item"><span class="dot '+col+'"></span>'+esc(text)+'</div>'
-        for text,col in (mail,report,erptext))+'</div>'
-
-def render(rows,catalog,db,amounts,system=None,calendar_month="",edit_appointment=""):
-    system=system or {}
+def render(rows,catalog,db,amounts,calendar_month="",edit_appointment=""):
     counts=Counter(r["status"] for r in rows)
     pending=sum(1 for r in rows if not r["finalized_at"] and r["status"] not in ("cancelled","paid"))
     complete=sum(1 for r in rows if r["finalized_at"])
     inprogress=counts["in_progress"]+counts["approved"]
     new=counts["new"]
-    config={"mailbox":system.get("mailbox",False),"report":system.get("report",False)}
-    erp=system.get("erp",{"running":False,"configured":False})
     with db() as con:
         today_cash=con.execute("""SELECT applied FROM customer_payments
             WHERE method='cash' AND paid_on=? AND voided_at IS NULL""",
