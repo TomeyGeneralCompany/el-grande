@@ -15,15 +15,15 @@ import urllib.error
 
 import blue_bridge
 
-ERP_DB=Path.home()/".local"/"share"/"el-grande"/"blueseer"/"data"/"en"/"bsdb.db"
-ENV=Path.home()/".config"/"el-grande"/"desk.env"
+ERP_DB=Path(os.getenv("ABD_BOOTSTRAP_DB",str(Path.home()/".local"/"share"/"el-grande"/"blueseer"/"data"/"en"/"bsdb.db")))
+ENV=Path(os.getenv("ABD_BOOTSTRAP_ENV",str(Path.home()/".config"/"el-grande"/"desk.env")))
 SERVICE_ITEMS={
     "ABD_BLUESEER_LABOR_ITEM":("ABD-LABOR","All by Devoll mechanic labor"),
     "ABD_BLUESEER_PARTS_ITEM":("ABD-PARTS","All by Devoll service parts"),
     "ABD_BLUESEER_TRAVEL_ITEM":("ABD-TRAVEL","All by Devoll mobile travel"),
     "ABD_BLUESEER_MISC_ITEM":("ABD-OTHER","All by Devoll other charges"),
 }
-API="http://127.0.0.1:8088/bsapi"
+API=os.getenv("ABD_BLUESEER_URL","http://127.0.0.1:8088/bsapi")
 
 def read_env(path=ENV):
     result={}
