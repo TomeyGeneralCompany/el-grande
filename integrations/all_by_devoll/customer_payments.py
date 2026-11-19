@@ -7,6 +7,7 @@ Corrections are void entries, never deletion or rewriting.
 from datetime import date,datetime,timezone
 from decimal import Decimal,InvalidOperation,ROUND_HALF_UP
 import erp_receipts
+import bank_ledger
 
 CENT=Decimal("0.01")
 METHODS=("cash","check","card","bank_transfer","other")
@@ -99,6 +100,9 @@ def record(con,ticket_id,data):
         "Payment #"+str(cursor.lastrowid)+": "+method+"; applied $"+str(applied)+
         "; change $"+str(change)+"; on "+paid_on))
     erp_receipts.queue_payment(con,cursor.lastrowid)
+    bank_ledger.init(con)
+    p=con.execute("SELECT * FROM customer_payments WHERE id=?",(cursor.lastrowid,)).fetchone()
+    bank_ledger.import_payment(con,p)
     state=_refresh_status(con,ticket_id)
     return cursor.lastrowid,state
 def void(con,ticket_id,payment_id,reason):
@@ -114,4 +118,5 @@ def void(con,ticket_id,payment_id,reason):
     con.execute("INSERT INTO events(ticket_id,timestamp,event,detail) VALUES(?,?,?,?)",
                 (ticket_id,now,"payment_voided","Payment #"+str(payment_id)+": "+reason))
     erp_receipts.queue_void(con,payment_id)
+    bank_ledger.init(con)
     return _refresh_status(con,ticket_id)
