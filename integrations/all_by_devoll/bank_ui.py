@@ -69,7 +69,7 @@ table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:9px;bord
       +'<label>Note<input name="memo" maxlength="300"></label>'
       +'<button type="submit">Record transfer</button></form></div></section>')
     choices="".join('<option value="%s">%s</option>' % (str(a["id"]),e(a["name"])) for a in cash_rows)
-    content.append('<section><h2>Count cash in the safe</h2>')
+    content.append('<section id="cash-count"><h2>Count cash in the safe</h2>')
     content.append('<p class="muted">Compare cash physically in the safe with the register. Save the count without changing recorded transactions.</p>')
     content.append('<form method="post" action="/bank/cash-count">')
     content.append('<label>Cash account<select name="account_id">'+choices+'</select></label>')
