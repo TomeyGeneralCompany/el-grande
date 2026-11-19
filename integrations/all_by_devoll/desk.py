@@ -27,6 +27,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import parts
+import stock
+import stock_ui
 import blue_bridge
 import invoice_bridge
 import job_reports
@@ -128,7 +130,7 @@ def db():
 def init():
     with closing(db()) as con, con:
         con.execute("PRAGMA journal_mode=WAL")
-        con.executescript(SCHEMA + parts.DDL + job_reports.DDL + job_calendar.DDL + erp_jobs.DDL + customer_payments.DDL + """
+        con.executescript(SCHEMA + stock.DDL + parts.DDL + job_reports.DDL + job_calendar.DDL + erp_jobs.DDL + customer_payments.DDL + """
         CREATE TABLE IF NOT EXISTS blue_sync (
           ticket_id INTEGER NOT NULL, kind TEXT NOT NULL,
           record_number TEXT NOT NULL, state TEXT NOT NULL,
@@ -750,6 +752,24 @@ class Handler(BaseHTTPRequestHandler):
             if page is not None:
                 return self.response_text(page)
             return self.response_text("Job not found",404,"text/plain")
+        if path in stock_ui.MASTERS or path in ("/inventory/item", "/purchases") or re.fullmatch(r"/purchases/[0-9]+", path):
+            query = parse_qs(urlsplit(self.path).query)
+            try:
+                with closing(db()) as con:
+                    con.execute("BEGIN")
+                    if path in stock_ui.MASTERS:
+                        page = stock_ui.master_page(con, path, query)
+                    elif path == "/inventory/item":
+                        page = stock_ui.item_page(con, query)
+                    elif path == "/purchases":
+                        page = stock_ui.order_page(con, query)
+                    else:
+                        page = stock_ui.order_detail(con, stock.identifier(path.rsplit("/", 1)[1]))
+                return self.response_text(page)
+            except ValueError as err:
+                return self.response_text(str(err), 400, "text/plain")
+            except LookupError as err:
+                return self.response_text(str(err), 404, "text/plain")
         if path=="/bank/export.csv":
             with db() as con:
                 data=io.StringIO()
@@ -839,8 +859,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self.auth():return
         origin=self.headers.get("Origin")
-        if urlsplit(self.path).path.startswith("/bank/") and not origin:
-            return self.response_text("Same-origin bank action required",403,"text/plain")
+        if urlsplit(self.path).path.startswith(("/bank/", "/inventory/", "/purchases/")) and not origin:
+            return self.response_text("Same-origin action required",403,"text/plain")
         if origin:
             expected=f"http://{self.headers.get('Host')}"
             if origin!=expected:return self.response_text("Invalid origin",403,"text/plain")
@@ -851,6 +871,37 @@ class Handler(BaseHTTPRequestHandler):
         data={k:v[0] for k,v in parse_qs(self.rfile.read(size).decode("utf-8",errors="replace"),keep_blank_values=True).items()}
         path=urlsplit(self.path).path
         try:
+            stock_save = {
+                "/inventory/save": stock.save_item,
+                "/inventory/vendors/save": stock.save_vendor,
+                "/inventory/bins/save": stock.save_bin,
+                "/inventory/adjust": stock.adjust,
+                "/purchases/new": stock.create_order,
+            }
+            purchase_action = re.fullmatch(r"/purchases/([0-9]+)/(line|remove-line|open|receive|reverse)", path)
+            if path in stock_save or purchase_action:
+                # Serialize the read/validate/write sequence for each receipt or stock movement.
+                with closing(db()) as con, con:
+                    con.execute("BEGIN IMMEDIATE")
+                    if purchase_action:
+                        order_id = stock.identifier(purchase_action[1])
+                        action = purchase_action[2]
+                        handlers = {"line": stock.add_line, "remove-line": stock.remove_line,
+                                    "receive": stock.receive, "reverse": stock.reverse}
+                        if action == "open":
+                            stock.open_order(con, order_id)
+                        else:
+                            handlers[action](con, order_id, data)
+                        target = f"/purchases/{order_id}"
+                    else:
+                        result = stock_save[path](con, data)
+                        if path == "/purchases/new":
+                            target = f"/purchases/{result}"
+                        elif path == "/inventory/adjust":
+                            target = "/inventory/item?" + urlencode({"sku": data["sku"].strip()})
+                        else:
+                            target = path.removesuffix("/save")
+                return self.redirect(target)
             if path in ("/appointments/save", "/appointments/remove"):
                 ticket_id = int(data.get("ticket_id", ""))
                 if not 0 < ticket_id <= 2**63 - 1:
