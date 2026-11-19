@@ -135,3 +135,12 @@ The same workflow applies to cash, checks, card payments, and partial receipts. 
 Previously recorded payments are queued on upgrade. The sync runs on the same local BlueSeer service and does not require Gmail, a card processor, a second app, or any additional operator account setup. The full invoice is unchanged by the payment, and Tomey General's 15% remains **off the top of the original final customer bill**, prior to operator expenses. This 0.8 implementation **supersedes** the former 0.6/0.7 limitation described above: native AR receipts are now integrated and processed automatically.
 
 The test suite includes native Java API and SQLite integration with an actual posted service invoice, an applied partial cash receipt, a reversal, an applied full receipt, and checks that BlueSeer reports the correct outstanding amount after each operation.
+
+
+## El Grande 0.9.0 — clickable connection setup in Settings
+
+The mechanic opens the El Grande desk icon and uses **Settings** from the ordinary browser dashboard. **Add Gmail connection** expands an in-app Gmail address, owner notification address and app-password form, with Save and Test actions. Gmail remains optional. The app-password value is not echoed back into the web page.
+
+**Add bank account** expands a bank name, account nickname, masked last-four digits and advanced existing BlueSeer bank-ledger code. Save validates that ledger code against the local BlueSeer API when connected and updates the existing protected office settings without a terminal or separate setup application. Bank account and Gmail details can be edited individually without erasing the other settings. This is manual accounting bank identification; it does not ask for full bank account numbers, routing numbers, online bank login credentials, or initiate bank transfers.
+
+The forms use ordinary local HTTP dashboard functionality, avoiding Linux shell interaction during routine use and retaining an interface that can be reused in a later **native Windows** port. This release itself is still a Zorin/Ubuntu package and does not include a native Windows installer.
