@@ -155,3 +155,12 @@ Open **Money & banks** in El Grande's browser dashboard. The module works offlin
 This uses Plaid's **Transactions/read-only** authorization; availability depends on the financial institution and the user's Plaid developer account/product permissions. Production credentials are needed for real bank data. Plaid Transfer is a separately approved service; **this release cannot electronically initiate ACH transfers or physically deposit currency at a bank.** The user-requested cash deposit register is implemented without needing that permission: transfer cash from Cash to the bank register and it records both sides of the movement. A bank balance is always labeled as bank-reported, separate from the manually entered running register when the two have not yet been matched.
 
 **No terminal required for routine operation or bank linking.** The web-based Settings, register and Plaid Link screens can be reused in a Windows-native version later. El Grande 0.10.0 remains a Zorin/Ubuntu installer; it is not a Windows executable.
+
+
+## El Grande 0.11.0 — Safe cash-count reconciliation
+
+In the existing **Money & banks** dashboard, use **Count cash in the safe**. Select the cash account, enter the money physically counted, the date, and optional notes. El Grande saves an immutable reconciliation snapshot of the physical amount, expected cash-register balance, and signed difference. Count history remains visible directly on the same page.
+
+A surplus or shortage does not silently overwrite the cash register, change an invoice, generate a payment, alter the owner's 15% gross entitlement, or modify BlueSeer. If a discrepancy exists, the mechanic can investigate and use the existing dated Money in / Money out actions for a justified correction, leaving both the count and subsequent record as evidence.
+
+The feature runs entirely offline and works before a business bank account exists; it adds no Gmail or banking prerequisite. It does not change the job desk's interface design beyond the new section. Version 0.11.0 remains the Zorin/Ubuntu installer; the Windows installation workflow and wider dashboard styling are separate follow-on stages.

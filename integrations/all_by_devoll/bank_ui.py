@@ -8,6 +8,8 @@ def e(x):return html.escape(str(x if x is not None else ""),quote=True)
 def page(con,provider_ready=False,status=""):
     rows=bank_ledger.accounts(con)
     entries=bank_ledger.recent_entries(con)
+    cash_rows=bank_ledger.cash_accounts(con)
+    count_rows=bank_ledger.recent_cash_counts(con)
     feed=con.execute("""SELECT f.*,a.name account_name
           FROM bank_feed f JOIN money_accounts a ON a.id=f.account_id
           ORDER BY f.entry_date DESC,f.id DESC LIMIT 50""").fetchall()
@@ -19,7 +21,7 @@ def page(con,provider_ready=False,status=""):
       "synced":"Bank balances and transactions refreshed.",
       "matched":"Imported transaction matched to a register entry.",
       "added":"Bank transaction recorded in register.",
-      "account":"Account added.","error":"Bank operation could not be completed."}.get(status,"")
+      "account":"Account added.","counted":"Safe cash count saved.","error":"Bank operation could not be completed."}.get(status,"")
     content=['''<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>Money | El Grande</title>
 <style>*{box-sizing:border-box}body{margin:0;background:#f5f7f6;color:#193634;font:15px/1.5 system-ui,sans-serif}
@@ -64,6 +66,26 @@ table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:9px;bord
       +'<label>Date<input name="entry_date" type="date" value="'+date.today().isoformat()+'" required></label>'
       +'<label>Note<input name="memo" maxlength="300"></label>'
       +'<button type="submit">Record transfer</button></form></div></section>')
+    choices="".join('<option value="%s">%s</option>' % (str(a["id"]),e(a["name"])) for a in cash_rows)
+    content.append('<section><h2>Count cash in the safe</h2>')
+    content.append('<p class="muted">Compare cash physically in the safe with the register. Save the count without changing recorded transactions.</p>')
+    content.append('<form method="post" action="/bank/cash-count">')
+    content.append('<label>Cash account<select name="account_id">'+choices+'</select></label>')
+    content.append('<label>Amount in safe ($)<input type="number" name="counted_amount" min="0" step=".01" required></label>')
+    content.append('<label>Date<input type="date" name="count_date" value="'+date.today().isoformat()+'" required></label>')
+    content.append('<label>Notes<input name="notes" maxlength="300"></label>')
+    content.append('<button>Save cash count</button></form>')
+    if count_rows:
+        content.append('<h3>Past cash counts</h3>')
+        for count in count_rows:
+            variance=int(count["variance_cents"])
+            label=('+' if variance>0 else '-' if variance<0 else '')
+            summary=(e(count["count_date"])+" / "+e(count["account_name"])+" / counted: "+
+              bank_ledger.amount(count["counted_cents"])+" USD; recorded: "+
+              bank_ledger.amount(count["expected_cents"])+" USD; difference: "+label+
+              bank_ledger.amount(abs(variance))+" USD; "+e(count["notes"]))
+            content.append("<p>"+summary+"</p>")
+    content.append("</section>")
     content.append('<section><h2>Bank connection</h2>')
     if provider_ready:
         content.append('<a class="button" href="/bank/connect">Connect bank</a> '

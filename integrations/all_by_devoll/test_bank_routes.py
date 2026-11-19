@@ -50,6 +50,21 @@ class BankRoutesTests(unittest.TestCase):
         with desk.db() as con:
             b=con.execute("SELECT name,opening_cents+(SELECT COALESCE(SUM(amount_cents),0) FROM money_entries WHERE account_id=money_accounts.id) AS balance FROM money_accounts ORDER BY id").fetchall()
         self.assertEqual([x["balance"] for x in b],[7500,7500])
+    def test_safe_count_submitted_through_dashboard_persists(self):
+        with desk.db() as con:
+            cash=con.execute("SELECT id FROM money_accounts WHERE kind='cash'").fetchone()["id"]
+        code,content=self.post("/bank/cash-count",{
+            "account_id":str(cash),"counted_amount":"42.75",
+            "notes":"Cash counted and locked in safe"})
+        self.assertEqual(code,200)
+        self.assertIn("Past cash counts",content)
+        self.assertIn("42.75",content)
+        with desk.db() as con:
+            row=con.execute("SELECT * FROM cash_counts ORDER BY id DESC LIMIT 1").fetchone()
+            self.assertEqual(row["counted_cents"],4275)
+            self.assertEqual(row["expected_cents"],0)
+            self.assertEqual(row["variance_cents"],4275)
+            self.assertEqual(con.execute("SELECT count(*) FROM money_entries").fetchone()[0],0)
     def test_bank_link_url_renders_provider_widget_not_local_credentials(self):
         with patch.object(bank_connect,"link_token",return_value="link-test-token"):
             request=Request(self.url("/bank/connect"),method="GET")
