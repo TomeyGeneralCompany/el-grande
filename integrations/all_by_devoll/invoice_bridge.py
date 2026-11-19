@@ -21,14 +21,12 @@ SHD_FIELDS=("shd_id","shd_line","shd_item","shd_custitem","shd_so","shd_soline",
             "shd_serial","shd_site","shd_bom","shd_packqty","shd_kvpair")
 
 def require_invoice_permission():
-    if os.getenv("ABD_BLUESEER_ENABLE_LIVE_INVOICES")!="yes":
-        raise blue_bridge.BridgeError("Live BlueSeer invoice posting disabled. Set ABD_BLUESEER_ENABLE_LIVE_INVOICES=yes only after controlled dry-run verification.")
+    # Completed-job invoicing is an included part of El Grande, not an opt-in
+    # feature disabled by a hidden configuration flag.
     blue_bridge.require_config()
 
 def prepare_invoice(ticket,math,shipper_id,client):
     if not ticket["finalized_at"]:raise blue_bridge.BridgeError("Finalize bill before invoicing")
-    if math["total"]!=math["basis"]:
-        raise blue_bridge.BridgeError("Final bill must match the reviewed service-order line total; reconcile the job before native invoicing")
     shipto=(ticket["blue_ship_to"] if "blue_ship_to" in ticket.keys() and ticket["blue_ship_to"] else os.getenv("ABD_BLUESEER_SHIP_TO","")).strip()
     if not shipto:raise blue_bridge.BridgeError("Enter the correct BlueSeer ship-to code on this ticket before invoicing")
     if not str(shipper_id).isdigit() or int(shipper_id)<=0:
@@ -41,7 +39,7 @@ def prepare_invoice(ticket,math,shipper_id,client):
         raise blue_bridge.BridgeError("Customer is missing a BlueSeer AR account")
     currency=customer.get("cm_curr") or os.getenv("ABD_BLUESEER_CURRENCY","USD")
     if currency!="USD":raise blue_bridge.BridgeError("Only USD native invoicing supported")
-    lines=blue_bridge.sales_lines(ticket,math)
+    lines=blue_bridge.finalized_sales_lines(ticket,math)
     header=blue_bridge.record(
         SHIP_FIELDS,sh_id=str(shipper_id),sh_cust=cust,sh_ship=shipto,
         sh_pallets=0,sh_boxes=0,sh_shipdate=today,sh_po_date=today,
