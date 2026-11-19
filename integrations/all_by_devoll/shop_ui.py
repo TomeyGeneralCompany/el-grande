@@ -240,8 +240,8 @@ def render(rows,catalog,db,amounts,system=None):
                 '<div><span>Payment status</span><b>'+("Paid" if paid_state["due"]==0 else "Unpaid" if paid_state["received"]==0 else "Partly paid")+'</b></div>'
                 '<div><span>Still owed</span><b>$'+format(paid_state["due"],",.2f")+'</b></div></div>')
             if paid_state["due"]>0:
-                payment_html+=(postform('/ticket/'+str(n)+'/pay-in-full',"Mark invoice paid (cash)","action")
-                    +'<p class="small muted">Press this after the customer hands over the full amount owed.</p>')
+                payment_html+=(postform('/ticket/'+str(n)+'/pay-in-full',"Mark Paid","action")
+                    +'<p class="small muted">Records the remaining amount received in cash today.</p>')
                 choices=''.join('<option value="'+esc(k)+'"'+(' selected' if k=="cash" else '')+'>'+v+'</option>' for k,v in method_labels.items())
                 payment_html+=('<details class="inner"><summary>Record partial payment or another payment method</summary>'
                     '<form method="post" action="/ticket/'+str(n)+'/payment">'
