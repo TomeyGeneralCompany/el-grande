@@ -15,15 +15,15 @@ class OfficeSettingsTests(unittest.TestCase):
     def tearDown(self):
         office_settings.HOME_CONFIG=self.old
         self.tmp.cleanup()
-    def test_email_settings_save_without_erasing_erp(self):
+    def test_email_settings_save_preserves_other_settings(self):
         office_settings.HOME_CONFIG.parent.mkdir(parents=True,exist_ok=True)
-        office_settings.HOME_CONFIG.write_text("ABD_BLUESEER_SITE=1000\nABD_IMAP_APP_PASSWORD=oldvalue\n")
+        office_settings.HOME_CONFIG.write_text("ABD_BIND=127.0.0.1\nABD_IMAP_APP_PASSWORD=oldvalue\n")
         d=office_settings.save({"ABD_OWNER_REPORT_TO":"isaiztomey7@gmail.com",
            "ABD_IMAP_USER":"allbydevoll@gmail.com","ABD_IMAP_APP_PASSWORD":""})
-        self.assertEqual(d["ABD_BLUESEER_SITE"],"1000")
+        self.assertEqual(d["ABD_BIND"],"127.0.0.1")
         self.assertEqual(d["ABD_IMAP_APP_PASSWORD"],"oldvalue")
         self.assertEqual(office_settings.HOME_CONFIG.stat().st_mode & 0o777,0o600)
-        self.assertIn("ABD_BLUESEER_SITE=1000",office_settings.HOME_CONFIG.read_text())
+        self.assertIn("ABD_BIND=127.0.0.1",office_settings.HOME_CONFIG.read_text())
     def test_updated_gmail_secret_applies_to_outbound_immediately(self):
         with patch.dict(os.environ,{"ABD_REPORT_SMTP_APP_PASSWORD":"oldpassword"},clear=False):
             office_settings.save({"ABD_OWNER_REPORT_TO":"isaiztomey7@gmail.com",
@@ -65,30 +65,16 @@ class OfficeSettingsTests(unittest.TestCase):
                 "ABD_BANK_LAST4":"4321","ABD_BLUESEER_PAYMENT_BANK":"bk"})
         self.assertEqual(result["ABD_BANK_NAME"],"Local Bank")
         self.assertEqual(result["ABD_BANK_LAST4"],"4321")
-        self.assertEqual(result["ABD_BLUESEER_PAYMENT_BANK"],"BK")
+        self.assertNotIn("ABD_BLUESEER_PAYMENT_BANK",result)
         self.assertEqual(result["ABD_IMAP_APP_PASSWORD"],"credential")
         self.assertEqual(office_settings.HOME_CONFIG.stat().st_mode & 0o777,0o600)
         html=office_settings.page(result,"bank-saved")
         self.assertIn("Local Bank",html)
         self.assertIn("4321",html)
         self.assertNotIn("credential",html)
-    def test_reject_full_account_and_invalid_bank_code(self):
-        with patch.dict(os.environ,{"ABD_BLUESEER_CONNECTED":"no"}):
-            with self.assertRaises(ValueError):
-                office_settings.save_bank({"ABD_BANK_LAST4":"1234567890"})
-            with self.assertRaises(ValueError):
-                office_settings.save_bank({"ABD_BLUESEER_PAYMENT_BANK":"BK\\nMALICIOUS"})
-    def test_native_bank_code_must_exist_before_use(self):
-        with patch.dict(os.environ,{"ABD_BLUESEER_CONNECTED":"yes"}):
-            with patch("blue_bridge.BlueSeerClient") as factory:
-                factory.return_value.call.return_value={"id":"BK","account":"10000000"}
-                saved=office_settings.save_bank({"ABD_BANK_NAME":"Local Bank",
-                    "ABD_BLUESEER_PAYMENT_BANK":"BK"})
-                self.assertEqual(saved["ABD_BLUESEER_PAYMENT_BANK"],"BK")
-            with patch("blue_bridge.BlueSeerClient") as factory:
-                factory.return_value.call.return_value={"id":"","account":""}
-                with self.assertRaises(ValueError):
-                    office_settings.save_bank({"ABD_BLUESEER_PAYMENT_BANK":"XYZ"})
+    def test_reject_full_account(self):
+        with self.assertRaises(ValueError):
+            office_settings.save_bank({"ABD_BANK_LAST4":"1234567890"})
 
     def test_shop_handler_exposes_settings(self):
         self.assertTrue(hasattr(desk.Handler,"do_GET"))

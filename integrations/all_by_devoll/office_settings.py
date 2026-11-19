@@ -1,7 +1,6 @@
 """Single-app office settings, stored locally with strict file permissions.
 
-Gmail requires one authorization credential from its owner; BlueSeer startup,
-database installation and local API are managed by El Grande.
+Gmail credentials and bank display details stay on the workstation.
 """
 import html
 import imaplib
@@ -9,12 +8,10 @@ import os
 from pathlib import Path
 import re
 import tempfile
-import urllib.error
-import urllib.request
 
 HOME_CONFIG=Path.home()/".config"/"el-grande"/"desk.env"
 EDITABLE=("ABD_OWNER_REPORT_TO","ABD_IMAP_USER","ABD_IMAP_APP_PASSWORD",
-          "ABD_BANK_NAME","ABD_BANK_LABEL","ABD_BANK_LAST4","ABD_BLUESEER_PAYMENT_BANK")
+          "ABD_BANK_NAME","ABD_BANK_LABEL","ABD_BANK_LAST4")
 DEFAULT_OWNER="isaiztomey7@gmail.com"
 DEFAULT_BUSINESS="allbydevoll@gmail.com"
 
@@ -39,10 +36,6 @@ def save(payload):
         elif key=="ABD_BANK_LAST4":
             if v and not re.fullmatch(r"[0-9]{4}",v):
                 raise ValueError("Enter only the last four account digits")
-        elif key=="ABD_BLUESEER_PAYMENT_BANK":
-            v=v.upper()
-            if not re.fullmatch(r"[A-Z0-9_-]{1,20}",v):
-                raise ValueError("Enter a valid accounting bank code")
         elif key in ("ABD_BANK_NAME","ABD_BANK_LABEL"):
             if len(v)>100:raise ValueError("Bank name or nickname is too long")
         if any(c in v for c in ("\r","\n","'","\"","\\","%")):
@@ -61,7 +54,6 @@ def save(payload):
     # The same authorized business Gmail credential is used for incoming
     # service requests and outgoing completed-job notifications.
     old["ABD_REPORT_SMTP_APP_PASSWORD"]=old.get("ABD_IMAP_APP_PASSWORD","")
-    old["ABD_BLUESEER_ENABLE_LIVE_INVOICES"]="yes"
     HOME_CONFIG.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
     os.chmod(HOME_CONFIG.parent,0o700)
     # Atomic replacement with restrictive permissions to avoid truncated settings
@@ -80,33 +72,13 @@ def save(payload):
         if os.path.exists(tmp):os.unlink(tmp)
     for key in ("ABD_OWNER_REPORT_TO","ABD_IMAP_USER","ABD_IMAP_APP_PASSWORD",
                 "ABD_REPORT_SMTP_USER","ABD_REPORT_SMTP_APP_PASSWORD",
-                "ABD_BANK_NAME","ABD_BANK_LABEL","ABD_BANK_LAST4",
-                "ABD_BLUESEER_PAYMENT_BANK"):
+                "ABD_BANK_NAME","ABD_BANK_LABEL","ABD_BANK_LAST4"):
         os.environ[key]=old.get(key,"")
     return old
 
 def save_bank(payload):
-    """Record the bank's display details and optional BlueSeer ledger code.
-
-    Full account or routing numbers are deliberately not requested: the
-    bundled ERP identifies its accounting bank by bank code, not credentials.
-    """
-    keys=("ABD_BANK_NAME","ABD_BANK_LABEL","ABD_BANK_LAST4",
-          "ABD_BLUESEER_PAYMENT_BANK")
-    updates={key:payload[key] for key in keys if key in payload}
+    updates = {key:payload[key] for key in ("ABD_BANK_NAME","ABD_BANK_LABEL","ABD_BANK_LAST4") if key in payload}
     if not updates:raise ValueError("No bank settings supplied")
-    code=str(updates.get("ABD_BLUESEER_PAYMENT_BANK",
-                         existing().get("ABD_BLUESEER_PAYMENT_BANK","BK"))).strip().upper()
-    if not re.fullmatch(r"[A-Z0-9_-]{1,20}",code):
-        raise ValueError("Invalid accounting bank code")
-    # The native API uses a configured BlueSeer bank record, never the
-    # customer's routing or account number, to post its AR receipts.
-    import blue_bridge
-    if os.getenv("ABD_BLUESEER_CONNECTED")=="yes":
-        bank=blue_bridge.BlueSeerClient().call("dataServFIN","getBankMstr",key=code)
-        if not isinstance(bank,dict) or bank.get("id")!=code or not bank.get("account"):
-            raise ValueError("That accounting bank code is not configured in BlueSeer")
-    updates["ABD_BLUESEER_PAYMENT_BANK"]=code
     return save(updates)
 
 def test_gmail(email=None,credential=None):
@@ -121,13 +93,6 @@ def test_gmail(email=None,credential=None):
         except Exception:pass
     return True
 
-def local_erp_running():
-    try:
-        with urllib.request.urlopen("http://127.0.0.1:8088/bsapi/authServ",timeout=2) as response:
-            return response.status in (200,401)
-    except urllib.error.HTTPError as e:return e.code==401
-    except (OSError,ValueError):return False
-
 def page(settings,status):
     import bank_connect
     import mavis_theme
@@ -140,14 +105,10 @@ def page(settings,status):
         "connected":"Gmail login successful.",
         "failed":"Gmail login could not be verified.",
         "bank-saved":"Bank information saved.",
-        "bank-failed":"Bank information could not be saved. Check the accounting bank code.",
+        "bank-failed":"Bank information could not be saved. Check the bank name and last four digits.",
         "plaid-saved":"Bank connection provider is configured.",
         "plaid-failed":"Bank connection needs valid provider credentials. You can still use the money ledger.",
     }.get(status,"")
-    connected=(settings.get("ABD_BLUESEER_CONNECTED")=="yes" and local_erp_running())
-    erp_caption=("BlueSeer connected" if connected else
-                 "BlueSeer setup incomplete" if not local_erp_running() else
-                 "Local BlueSeer is running")
     gmail_saved=bool(settings.get("ABD_IMAP_APP_PASSWORD"))
     bank_saved=bool(settings.get("ABD_BANK_NAME") or settings.get("ABD_BANK_LABEL"))
     gmail_label=("Gmail configured" if gmail_saved else "Add Gmail connection")
@@ -196,10 +157,7 @@ border-radius:9px;color:white;font-weight:700;list-style:none;display:inline-blo
 <label>Bank name<input name="ABD_BANK_NAME" type="text" maxlength="100" value=\""""+escape(settings.get("ABD_BANK_NAME",""))+""""></label>
 <label>Account nickname<input name="ABD_BANK_LABEL" type="text" maxlength="100" placeholder="Business checking" value=\""""+escape(settings.get("ABD_BANK_LABEL",""))+""""></label>
 <label>Last four digits of account number<input name="ABD_BANK_LAST4" type="text" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="1234" value=\""""+escape(settings.get("ABD_BANK_LAST4",""))+""""></label>
-<details><summary>Advanced accounting settings</summary>
-<label>BlueSeer bank ledger code<input name="ABD_BLUESEER_PAYMENT_BANK" type="text" maxlength="20" value=\""""+escape(settings.get("ABD_BLUESEER_PAYMENT_BANK","BK"))+""""></label>
-<p class="hint">Use a bank code already configured in BlueSeer. The default is BK.</p>
-</details>
+
 <p class="hint">No routing number or online banking password is required. This saves the bank account identity for office records; it is not an online bank sign-in.</p>
 <button type="submit">Save bank account</button></form></details></section>
 <section><h2>Connect to your bank</h2>
@@ -215,8 +173,7 @@ border-radius:9px;color:white;font-weight:700;list-style:none;display:inline-blo
 <button type="submit">Save provider connection</button></form></details>
 <p><a href="/bank">Open money ledger and bank connections</a></p>
 </section>
-<section><h2>Accounting</h2>
-<p><strong>"""+escape(erp_caption)+"""</strong></p>
-<p class="muted">Invoices and recorded payments synchronize with the bundled BlueSeer accounting engine automatically. No terminal setup is required for routine use.</p>
+<section><h2>Records</h2>
+<p><a href="/reports/legacy.csv">Download imported accounting and transaction history</a></p>
 </section></main></body></html>"""
     return page_html.replace("</style>","</style><style>"+mavis_theme.CSS+"</style>")

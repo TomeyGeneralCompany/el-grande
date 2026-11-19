@@ -1,12 +1,10 @@
 """Cash-first, append-only manual customer payment ledger for All by Devoll.
 
-The final invoice is authoritative. Entries are queued automatically for native
-BlueSeer AR/GL settlement. The mechanic records each payment once.
+The final invoice is authoritative. Payments update the local cashbook.
 Corrections are void entries, never deletion or rewriting.
 """
 from datetime import date,datetime,timezone
 from decimal import Decimal,InvalidOperation,ROUND_HALF_UP
-import erp_receipts
 import bank_ledger
 
 CENT=Decimal("0.01")
@@ -58,13 +56,7 @@ def _refresh_status(con,ticket_id):
     if money_state["due"]==0 and money_state["invoice"]>0:
         status="paid"
     else:
-        existing=con.execute("SELECT status FROM tickets WHERE id=?",(ticket_id,)).fetchone()
-        if existing["status"] not in ("paid","invoiced"):
-            status=existing["status"]
-        else:
-            posted=con.execute("""SELECT state FROM blue_sync WHERE ticket_id=?
-                                  AND kind='invoice'""",(ticket_id,)).fetchone()
-            status="invoiced" if posted and posted["state"]=="posted" else "completed"
+        status="completed"
     con.execute("UPDATE tickets SET status=?,updated_at=? WHERE id=?",(status,utc(),ticket_id))
     return money_state
 def record(con,ticket_id,data):
@@ -99,7 +91,6 @@ def record(con,ticket_id,data):
        (ticket_id,now,"payment_recorded",
         "Payment #"+str(cursor.lastrowid)+": "+method+"; applied $"+str(applied)+
         "; change $"+str(change)+"; on "+paid_on))
-    erp_receipts.queue_payment(con,cursor.lastrowid)
     p=con.execute("SELECT * FROM customer_payments WHERE id=?",(cursor.lastrowid,)).fetchone()
     bank_ledger.import_payment(con,p)
     state=_refresh_status(con,ticket_id)
@@ -116,7 +107,6 @@ def void(con,ticket_id,payment_id,reason):
       SET voided_at=?,void_reason=? WHERE id=?""",(now,reason,payment_id))
     con.execute("INSERT INTO events(ticket_id,timestamp,event,detail) VALUES(?,?,?,?)",
                 (ticket_id,now,"payment_voided","Payment #"+str(payment_id)+": "+reason))
-    erp_receipts.queue_void(con,payment_id)
     p=con.execute('SELECT * FROM customer_payments WHERE id=?',(payment_id,)).fetchone()
     bank_ledger.import_payment(con,p)
     return _refresh_status(con,ticket_id)

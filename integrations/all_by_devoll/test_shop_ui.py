@@ -40,13 +40,9 @@ class ShopUITests(unittest.TestCase):
         self.assertIn("AutoZonePro",page)
         self.assertNotIn("ERP customer code",page)
         self.assertNotIn("BlueSeer accounting",page)
-    def test_dashboard_render_skips_erp_probe(self):
-        erp = {"running": True, "configured": True}
-        with patch.object(desk, "erp_status", return_value=erp) as probe:
-            self.assertIn("Job calendar", desk.render_dashboard())
-            probe.assert_not_called()
-            self.assertEqual(desk.system_status()["erp"], erp)
-            probe.assert_called_once()
+    def test_dashboard_render_requires_no_native_service(self):
+        self.assertIn("Job calendar", desk.render_dashboard())
+        self.assertNotIn("erp", desk.system_status())
 
     def test_optional_estimate_runs_in_background_one_at_a_time(self):
         started, release, finished = Event(), Event(), Event()
@@ -84,17 +80,6 @@ class ShopUITests(unittest.TestCase):
         self.assertNotIn('open <strong>El Grande Setup</strong>',page)
         self.assertNotIn("Office connections",page)
         self.assertNotIn("BlueSeer not responding",page)
-    def test_unchanged_price_after_native_sync_is_not_rejected(self):
-        with desk.db() as con:
-            con.execute("INSERT INTO blue_sync(ticket_id,kind,record_number,state,updated_at) VALUES (?,?,?,?,?)",
-                        (self.job,"quote","ABD000001","synced",desk.utc()))
-        desk.update_ticket(self.job,{"labor_hours":"0.00","labor_rate":"0.00","parts_charge":"0.00",
-                                     "notes":"Spoke to customer"})
-        with desk.db() as con:
-            row=con.execute("SELECT notes FROM tickets WHERE id=?",(self.job,)).fetchone()
-        self.assertEqual(row["notes"],"Spoke to customer")
-        with self.assertRaises(ValueError):
-            desk.update_ticket(self.job,{"parts_charge":"5.00"})
     def test_closed_job_has_actual_invoice_not_edit_form(self):
         desk.finish_job(self.job,{
             "work_performed":"Changed pads and tested braking",

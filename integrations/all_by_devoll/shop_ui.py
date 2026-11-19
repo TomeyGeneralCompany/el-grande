@@ -117,7 +117,6 @@ def ticket_page(ticket, con, amounts, estimate_running=False):
     if done:
         completed=con.execute("SELECT * FROM job_completions WHERE ticket_id=?", (n,)).fetchone()
         owner=con.execute("SELECT state FROM owner_reports WHERE ticket_id=?", (n,)).fetchone()
-        native=con.execute("SELECT state FROM erp_jobs WHERE ticket_id=?", (n,)).fetchone()
         receipts=customer_payments.payments(con,n)
         paid_state=customer_payments.balance(con,n)
     else:
@@ -193,8 +192,7 @@ def ticket_page(ticket, con, amounts, estimate_running=False):
                     ("Hours worked",esc(completed["actual_hours"])),
                     ("Labor cost","$"+esc(completed["actual_labor_cost"])),
                     ("Parts cost","$"+esc(completed["actual_parts_cost"])),
-                    ("Report email",esc(owner["state"] if owner else "Not queued")),
-                    ("BlueSeer order",esc(state_name(native["state"]) if native else "Not queued"))))+'</div></section>')
+                    ("Report email",esc(owner["state"] if owner else "Not queued"))))+'</div></section>')
         else:
             inner.append('<section class="worksection"><h3>Finalized job</h3><p>Invoice: $'+esc(ticket["bill_total"])+'</p></section>')
         method_labels={"cash":"Cash","check":"Check","card":"Card",
@@ -263,6 +261,7 @@ def page_shell(content):
 <a href="/#calendar">▦ &nbsp;Calendar</a>
 <a href="/inventory">Inventory</a>
 <a href="/purchases">Purchase orders</a>
+<a href="/work-orders">Work orders</a>
 <a href="/#jobs">♙ &nbsp;Customers</a>
 <a href="/#jobs">▤ &nbsp;Invoices</a>
 <a href="/bank">$ &nbsp;Money &amp; Banks</a>
@@ -270,7 +269,7 @@ def page_shell(content):
 <a href="/payments.csv">▥ &nbsp;Reports</a>
 <a href="/settings">⚙ &nbsp;Settings</a>
 </div>
-<div class="sidebar-bottom"><strong>● System status</strong><div>El Grande v0.13.0</div>
+<div class="sidebar-bottom"><strong>● System status</strong><div>El Grande v0.14.0</div>
 <a href="/health">View connection status</a></div>
 </aside>
 <div class="dashboard-workspace">
