@@ -36,5 +36,11 @@ ABD_BOOTSTRAP_DB="$ROOT/build/smoke-java/data/en/bsdb.db" \
 ABD_BOOTSTRAP_ENV="$ROOT/build/smoke-java/desk.env" \
 ABD_BLUESEER_URL="http://127.0.0.1:18088/bsapi" \
 PYTHONPATH="$ROOT/integrations/all_by_devoll" \
-python3 "$ROOT/integrations/all_by_devoll/erp_bootstrap.py"
+python3 "$ROOT/integrations/all_by_devoll/erp_bootstrap.py" || {
+  echo "BlueSeer native auth failed; printing bytecode signatures for debugging."
+  javap -c -p -classpath "$ROOT/lib/bsmf.jar" bsmf.MainFrame |
+    sed -n '/confirmServerLogin(/,/^  public static /p' | head -160 || true
+  tail -70 "$ROOT/build/smoke-java/java-api.log"
+  exit 1
+}
 
