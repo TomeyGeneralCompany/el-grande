@@ -130,6 +130,7 @@ def local_erp_running():
 
 def page(settings,status):
     import bank_connect
+    import mavis_theme
     provider_configured,provider_environment=bank_connect.ready()
     provider_options="".join('<option value="'+key+'"'+(' selected' if provider_environment==key else '')+'>'+label+'</option>' for key,label in (
        ("sandbox","Sandbox (testing)"),("development","Development"),("production","Production (real banks)")))
@@ -154,7 +155,7 @@ def page(settings,status):
     bank_display=escape(settings.get("ABD_BANK_NAME",""))
     if settings.get("ABD_BANK_LAST4"):
         bank_display+=(" •••• "+escape(settings["ABD_BANK_LAST4"]))
-    return """<!doctype html><html lang="en"><head><meta charset="utf-8">
+    page_html = """<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Settings | All by Devoll</title>
 <style>
@@ -218,3 +219,4 @@ border-radius:9px;color:white;font-weight:700;list-style:none;display:inline-blo
 <p><strong>"""+escape(erp_caption)+"""</strong></p>
 <p class="muted">Invoices and recorded payments synchronize with the bundled BlueSeer accounting engine automatically. No terminal setup is required for routine use.</p>
 </section></main></body></html>"""
+    return page_html.replace("</style>","</style><style>"+mavis_theme.CSS+"</style>")
