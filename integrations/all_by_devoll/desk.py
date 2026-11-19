@@ -619,6 +619,25 @@ class Handler(BaseHTTPRequestHandler):
                                   parse_qs(urlsplit(self.path).query).get("status",[""])[0]))
         if path=="/health":
             return self.response_text(json.dumps({"ok":True,"database":str(DB),"connections":system_status()}),typ="application/json")
+        if path=="/payments.csv":
+            with db() as con:
+                rows=con.execute("""SELECT p.*,t.customer,t.bill_total
+                    FROM customer_payments p JOIN tickets t ON t.id=p.ticket_id
+                    ORDER BY p.paid_on,p.id""").fetchall()
+            data=io.StringIO();writer=csv.writer(data)
+            writer.writerow(["payment_id","ticket","customer","paid_on","method",
+                 "cash_tendered_or_payment","applied_to_invoice","change_given",
+                 "reference","recorded_at","voided_at","void_reason","invoice_total"])
+            def safe(value):
+                value=str(value if value is not None else "")
+                return "'"+value if value.lstrip().startswith(("=","+","-","@")) else value
+            for p in rows:
+                writer.writerow([p["id"],"ABD-"+f'{p["ticket_id"]:06d}',
+                     safe(p["customer"]),p["paid_on"],p["method"],p["tendered"],
+                     p["applied"],p["change_given"],safe(p["reference"]),
+                     p["recorded_at"],p["voided_at"] or "",
+                     safe(p["void_reason"]),p["bill_total"]])
+            return self.response_text(data.getvalue(),typ="text/csv; charset=utf-8")
         if path=="/export.csv":
             with db() as con:rows=con.execute("SELECT * FROM tickets ORDER BY id").fetchall()
             data=io.StringIO();writer=csv.writer(data)
