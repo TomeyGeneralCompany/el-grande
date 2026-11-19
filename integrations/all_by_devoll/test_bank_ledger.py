@@ -132,7 +132,7 @@ class MoneyLedgerTests(unittest.TestCase):
             screen=bank_ui.page(con,False)
             self.assertIn("Count cash in the safe",screen)
             self.assertIn('action="/bank/cash-count"',screen)
-            self.assertIn("Safe-count history",screen)
+            self.assertIn("Past cash counts",screen)
     def test_customer_gross_split_not_modified(self):
         with desk.db() as con:
             job=con.execute("SELECT * FROM tickets").fetchone()
