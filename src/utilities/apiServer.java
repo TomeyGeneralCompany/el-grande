@@ -121,6 +121,7 @@ public class apiServer {
          
         boolean isDebug = false;
         boolean isSSL = false;
+        boolean shopProfile = java.util.Arrays.asList(args).contains("-shop");
         String configfile = "";
         if (args != null && args.length > 0) {
         int i = 0;
@@ -188,41 +189,43 @@ public class apiServer {
         }
         
         
-        context.addServlet(AS2Serv.class, "/as2/*");
-        context.addServlet(WorkOrdServ.class, "/WorkOrder/*");
-        context.addServlet(WorkOrdServ.class, "/WorkOrderList/*");
-        context.addServlet(SalesOrdServ.class, "/SalesOrder/*");
-        context.addServlet(SalesOrdServ.class, "/SalesOrderList/*");
-        context.addServlet(ShipperServ.class, "/Shipper/*");
-        context.addServlet(ShipperServ.class, "/ShipperList/*");
-        context.addServlet(ItemServ.class, "/Item/*");
-        context.addServlet(ItemServ.class, "/ItemList/*");
-        context.addServlet(CustomerServ.class, "/Customer/*");
-        context.addServlet(CustomerServ.class, "/CustomerList/*");
-        context.addServlet(TestServlet.class, "/test/*");
-        context.addServlet(dataServ.class, "/dataServ/*");
-        context.addServlet(dataServFIN.class, "/dataServFIN/*"); 
-        context.addServlet(dataServORD.class, "/dataServORD/*"); 
+        context.addServlet(dataServFIN.class, "/dataServFIN/*");
+        context.addServlet(dataServORD.class, "/dataServORD/*");
         context.addServlet(authServ.class, "/authServ/*");
         context.addServlet(dataServOV.class, "/dataServOV/*");
-        context.addServlet(dataServDT.class, "/dataServDT/*");
-        context.addServlet(dataServEDI.class, "/dataServEDI/*");
         context.addServlet(dataServADM.class, "/dataServADM/*");
-        context.addServlet(dataServSHP.class, "/dataServSHP/*"); 
+        context.addServlet(dataServSHP.class, "/dataServSHP/*");
         context.addServlet(dataServINV.class, "/dataServINV/*");
         context.addServlet(dataServCUS.class, "/dataServCUS/*");
-        context.addServlet(dataServLBL.class, "/dataServLBL/*");
-        context.addServlet(dataServENG.class, "/dataServENG/*");
-        context.addServlet(dataServFRT.class, "/dataServFRT/*");
-        context.addServlet(dataServHRM.class, "/dataServHRM/*");
-        context.addServlet(dataServPRD.class, "/dataServPRD/*");
         context.addServlet(dataServPUR.class, "/dataServPUR/*");
         context.addServlet(dataServRCV.class, "/dataServRCV/*");
         context.addServlet(dataServSCH.class, "/dataServSCH/*");
         context.addServlet(dataServVDR.class, "/dataServVDR/*");
-        context.addServlet(dataServFAP.class, "/dataServFAP/*");
         context.addServlet(dataServFAR.class, "/dataServFAR/*");
-        context.addServlet(dataServTCA.class, "/dataServTCA/*");
+        if (!shopProfile) {
+            context.addServlet(AS2Serv.class, "/as2/*");
+            context.addServlet(WorkOrdServ.class, "/WorkOrder/*");
+            context.addServlet(WorkOrdServ.class, "/WorkOrderList/*");
+            context.addServlet(SalesOrdServ.class, "/SalesOrder/*");
+            context.addServlet(SalesOrdServ.class, "/SalesOrderList/*");
+            context.addServlet(ShipperServ.class, "/Shipper/*");
+            context.addServlet(ShipperServ.class, "/ShipperList/*");
+            context.addServlet(ItemServ.class, "/Item/*");
+            context.addServlet(ItemServ.class, "/ItemList/*");
+            context.addServlet(CustomerServ.class, "/Customer/*");
+            context.addServlet(CustomerServ.class, "/CustomerList/*");
+            context.addServlet(TestServlet.class, "/test/*");
+            context.addServlet(dataServ.class, "/dataServ/*");
+            context.addServlet(dataServDT.class, "/dataServDT/*");
+            context.addServlet(dataServEDI.class, "/dataServEDI/*");
+            context.addServlet(dataServLBL.class, "/dataServLBL/*");
+            context.addServlet(dataServENG.class, "/dataServENG/*");
+            context.addServlet(dataServFRT.class, "/dataServFRT/*");
+            context.addServlet(dataServHRM.class, "/dataServHRM/*");
+            context.addServlet(dataServPRD.class, "/dataServPRD/*");
+            context.addServlet(dataServFAP.class, "/dataServFAP/*");
+            context.addServlet(dataServTCA.class, "/dataServTCA/*");
+        }
         //server.setHandler(context);
         
         /*

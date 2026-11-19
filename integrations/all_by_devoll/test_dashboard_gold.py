@@ -8,12 +8,10 @@ from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from pathlib import Path
-from datetime import date
 from decimal import Decimal
 from unittest.mock import patch
 import desk
 import shop_ui
-import dashboard_overview
 import mavis_theme
 
 class DashboardGoldTests(unittest.TestCase):
@@ -26,9 +24,7 @@ class DashboardGoldTests(unittest.TestCase):
         desk.DB=self.old
         self.tmp.cleanup()
     def page(self):
-        with desk.db() as con:
-            jobs=con.execute("SELECT * FROM tickets ORDER BY id DESC").fetchall()
-        return shop_ui.render(jobs,[],desk.db,desk.amounts)
+        return desk.render_dashboard()
     def test_two_real_logos_are_bundled_pngs(self):
         root=Path(shop_ui.__file__).parent/"brand"
         for name in ("tomey.png","devoll.png"):
@@ -85,6 +81,29 @@ class DashboardGoldTests(unittest.TestCase):
         self.assertIn('href="/bank#cash-count"',page)
         self.assertIn("New service request",page)
 
+    def test_dashboard_pages_jobs_but_counts_and_balances_use_all_history(self):
+        oldest, _ = desk.create_ticket({"customer":"Old billing customer"}, "manual:old")
+        desk.finalize_ticket(oldest, "123.45")
+        desk.record_customer_payment(oldest, {"amount_received":"0.05","method":"check"})
+        with desk.db() as con:
+            stamp = desk.utc()
+            con.executemany("""INSERT INTO tickets(source_id,received_at,customer,updated_at)
+                VALUES(?,?,?,?)""", ((f"manual:extra-{i}",stamp,f"Fixture {i}",stamp) for i in range(501)))
+        page = self.page()
+        self.assertEqual(page.count('<article class="ticket"'), 25)
+        self.assertIn('<strong>Jobs (total)</strong><span class="overview-money">502</span>',page)
+        self.assertIn('<strong>Unpaid customer invoices</strong><span class="overview-money">$123.40</span>',page)
+        self.assertNotIn('name="actual_invoice"',page)
+        older = desk.render_dashboard({"before":["478"]})
+        self.assertIn('id="ticket-477"',older)
+        self.assertIn("Newer jobs",older)
+        newer = desk.render_dashboard({"after":["477"]})
+        self.assertIn('id="ticket-502"',newer)
+        detail = desk.render_ticket(oldest)
+        self.assertIn("Old billing customer",detail)
+        self.assertIn("123.40",detail)
+        self.assertIn("Mark Paid",detail)
+
     def test_calendar_schedules_existing_job_reschedules_and_removes_it(self):
         job,_=desk.create_ticket({"customer":"Shop <customer>","problem":"Replace starter"}, "manual:calendar")
         # Exercise initialization on a database created before appointments existed.
@@ -108,6 +127,9 @@ class DashboardGoldTests(unittest.TestCase):
                 self.assertIn('id="appointments-2026-12-01"', page)
                 self.assertIn("Shop &lt;customer&gt;", page)
                 self.assertIn("9:30 AM", page)
+                self.assertIn(f'href="/ticket/{job}">Shop &lt;customer&gt;</a>', page)
+                with urlopen(base + f"/ticket/{job}", timeout=5) as response:
+                    self.assertIn('name="actual_invoice"', response.read().decode())
 
                 with urlopen(base + f"/?calendar=2026-12&edit_appointment={job}", timeout=5) as response:
                     editor = response.read().decode()

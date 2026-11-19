@@ -84,9 +84,7 @@ class CompletedJobTests(unittest.TestCase):
         self.assertIn("2018+Santa+Fe",url)
         with self.assertRaises(ValueError):job_reports.google_search_link("x"*450)
     def test_operator_html_contains_actual_completion_form_and_search(self):
-        with desk.db() as con:
-            row=con.execute("SELECT * FROM tickets WHERE id=?",(self.ident,)).fetchone()
-        page=desk.render([row])
+        page=desk.render_ticket(self.ident)
         self.assertIn("name=\"work_performed\"",page)
         self.assertIn("name=\"actual_labor_cost\"",page)
         self.assertIn("name=\"actual_invoice\"",page)

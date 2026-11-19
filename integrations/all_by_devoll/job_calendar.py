@@ -90,20 +90,18 @@ def appointment_form(jobs, default_day, selected=None):
         '<a href="#new">Create a job</a></div></form>'
     )
 
-def render(db, visible_jobs, requested_month="", edit_ticket=""):
+def render(con, requested_month="", edit_ticket=""):
     current = today()
     first = parse_month(requested_month, current)
     last = first.replace(day=calendar.monthrange(first.year, first.month)[1])
     current_month = first.isoformat()[:7]
-    with db() as con:
-        jobs = con.execute("SELECT id, customer, service FROM tickets WHERE " + ACTIVE + " ORDER BY id DESC").fetchall()
-        month_jobs = con.execute("""SELECT a.*, t.customer, t.service, t.status, t.finalized_at
-            FROM job_appointments AS a JOIN tickets AS t ON t.id = a.ticket_id
-            WHERE a.appointment_date BETWEEN ? AND ?
-            ORDER BY a.appointment_date, a.appointment_time, a.ticket_id""",
-            (first.isoformat(), last.isoformat())).fetchall()
+    jobs = con.execute("SELECT id, customer, service FROM tickets WHERE " + ACTIVE + " ORDER BY id DESC").fetchall()
+    month_jobs = con.execute("""SELECT a.*, t.customer, t.service, t.status, t.finalized_at
+        FROM job_appointments AS a JOIN tickets AS t ON t.id = a.ticket_id
+        WHERE a.appointment_date BETWEEN ? AND ?
+        ORDER BY a.appointment_date, a.appointment_time, a.ticket_id""",
+        (first.isoformat(), last.isoformat())).fetchall()
     open_ids = {job["id"] for job in jobs}
-    visible_ids = {job["id"] for job in visible_jobs}
     selected = next((job for job in month_jobs if str(job["ticket_id"]) == edit_ticket
                      and job["ticket_id"] in open_ids), None)
 
@@ -143,8 +141,7 @@ def render(db, visible_jobs, requested_month="", edit_ticket=""):
         day = date.fromisoformat(iso)
         clock = time.fromisoformat(row["appointment_time"]).strftime("%I:%M %p").lstrip("0")
         label = escape(row["customer"] or row["service"] or "Service request")
-        if ticket_id in visible_ids:
-            label = f'<a href="#ticket-{ticket_id}">{label}</a>'
+        label = f'<a href="/ticket/{ticket_id}">{label}</a>'
         anchor = f' id="appointments-{iso}"' if iso != listed_date else ""
         listed_date = iso
         edit = (f'<a href="/?calendar={current_month}&amp;edit_appointment={ticket_id}#calendar-form">Reschedule</a>'

@@ -25,7 +25,7 @@ cp -a "$app/java/data-template/." "$work/data/"
 cp scripts/bs.cfg.sqlite.linux "$work/bs.cfg"
 (
     cd "$work"
-    exec java -Djava.awt.headless=true -cp "$app/java/classes:$app/java/lib/*" utilities.apiServer -config bs.cfg -port 18088
+    exec java -Djava.awt.headless=true -cp "$app/java/classes:$app/java/lib/*" utilities.apiServer -shop -config bs.cfg -port 18088
 ) >"$work/java-api.log" 2>&1 &
 pid=$!
 success=0
@@ -43,6 +43,11 @@ if [ "$success" -ne 1 ]; then
   exit 1
 fi
 echo "BlueSeer local ERP API responded on loopback (expected 401 for unauthenticated GET)."
+legacy_status="$(curl -s -o /dev/null -w '%{http_code}' --max-time 1 http://127.0.0.1:18088/bsapi/dataServEDI)"
+if [[ "$legacy_status" != "404" ]]; then
+    echo "Legacy EDI route is enabled in the shop profile"
+    exit 1
+fi
 # Exercise the packaged Java API and an isolated copy of its seed database.
 ABD_BOOTSTRAP_DB="$work/data/en/bsdb.db" \
 ABD_BOOTSTRAP_ENV="$work/desk.env" \

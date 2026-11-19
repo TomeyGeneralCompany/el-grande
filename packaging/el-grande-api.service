@@ -6,7 +6,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=%h/.local/share/el-grande/blueseer
-ExecStart=/usr/bin/java -cp /opt/el-grande/java/classes:/opt/el-grande/java/lib/* utilities.apiServer -config bs.cfg -port 8088
+ExecStart=/usr/bin/java -cp /opt/el-grande/java/classes:/opt/el-grande/java/lib/* utilities.apiServer -shop -config bs.cfg -port 8088
 Restart=on-failure
 RestartSec=10
 UMask=0077

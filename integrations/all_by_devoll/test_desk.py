@@ -108,7 +108,7 @@ Content-Type: text/html; charset=utf-8
         self.assertEqual(self.row(id_)["bill_total"],"")
     def test_render_is_escaped(self):
         id_,_=app.create_ticket({"customer":"<script>alert(1)</script>"}, "manual:test")
-        page=app.render([self.row(id_)])
+        page=app.render_ticket(id_)
         self.assertNotIn("<script>",page)
         self.assertIn("&lt;script&gt;",page)
     def test_events_recorded(self):

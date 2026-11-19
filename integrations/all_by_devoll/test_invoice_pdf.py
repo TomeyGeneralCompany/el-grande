@@ -6,7 +6,6 @@ from pathlib import Path
 from unittest.mock import patch
 import desk
 import invoice_pdf
-import shop_ui
 import customer_payments
 
 class InvoicePdfTests(unittest.TestCase):
@@ -64,17 +63,13 @@ class InvoicePdfTests(unittest.TestCase):
             desk.pay_invoice_in_full(self.id)
     def test_pdf_link_visible_with_simple_status_controls(self):
         self.complete()
-        with desk.db() as con:
-            rows=con.execute("SELECT * FROM tickets").fetchall()
-        page=shop_ui.render(rows,[],desk.db,desk.amounts)
+        page=desk.render_ticket(self.id)
         self.assertIn("invoice.pdf",page)
         self.assertIn("View / print PDF invoice",page)
         self.assertIn("Mark Paid",page)
         self.assertIn("Unpaid",page)
         desk.pay_invoice_in_full(self.id)
-        with desk.db() as con:
-            rows=con.execute("SELECT * FROM tickets").fetchall()
-        page=shop_ui.render(rows,[],desk.db,desk.amounts)
+        page=desk.render_ticket(self.id)
         self.assertIn("Paid in full",page)
         self.assertNotIn("Mark Paid",page)
     def test_pdf_available_for_legacy_finalized_job(self):

@@ -4,6 +4,7 @@ Site -> FormSubmit -> business Gmail inbox -> IMAP importer -> durable SQLite de
 """
 import base64
 import csv
+from contextlib import closing
 import email
 import html
 import imaplib
@@ -41,7 +42,7 @@ import bank_connect
 import invoice_pdf
 import urllib.error
 import customer_bridge
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, urlencode, urlsplit
 
 ROOT = Path(__file__).resolve().parent
 DB = Path(os.getenv("ABD_DB", str(ROOT / "data" / "tickets.sqlite3")))
@@ -55,6 +56,8 @@ IMAP_FOLDER = os.getenv("ABD_IMAP_FOLDER", "INBOX")
 POLL_SECONDS = max(30, int(os.getenv("ABD_POLL_SECONDS", "120")))
 OLLAMA_URL = os.getenv("ABD_OLLAMA_URL", "http://127.0.0.1:11434/api/generate")
 OLLAMA_MODEL = os.getenv("ABD_OLLAMA_MODEL", "qwen3:4b")
+estimate_lock = threading.Lock()
+estimate_ticket = None
 CENT = Decimal("0.01")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("all-by-devoll")
@@ -120,11 +123,11 @@ def db():
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA busy_timeout=15000")
     con.execute("PRAGMA foreign_keys=ON")
-    con.execute("PRAGMA journal_mode=WAL")
     return con
 
 def init():
-    with db() as con:
+    with closing(db()) as con, con:
+        con.execute("PRAGMA journal_mode=WAL")
         con.executescript(SCHEMA + parts.DDL + job_reports.DDL + job_calendar.DDL + erp_jobs.DDL + customer_payments.DDL + """
         CREATE TABLE IF NOT EXISTS blue_sync (
           ticket_id INTEGER NOT NULL, kind TEXT NOT NULL,
@@ -457,16 +460,51 @@ def suggest(ticket_id):
     if "raw_unstructured_output" in out:
         notes.append("Unstructured AI response (no automatic hours): "+str(out["raw_unstructured_output"])[:5000])
     msg="\n".join(notes)[:10000]
-    with db() as con:
+    with closing(db()) as con, con:
+        con.execute("BEGIN IMMEDIATE")
+        current=con.execute("SELECT finalized_at,labor_hours FROM tickets WHERE id=?",(ticket_id,)).fetchone()
+        linked=con.execute("SELECT 1 FROM blue_sync WHERE ticket_id=? AND state='synced' LIMIT 1",(ticket_id,)).fetchone()
+        if not current or current["finalized_at"] or linked:
+            raise ValueError("The job was finalized or synced while the estimate was running")
         now=utc()
         changes={"ai_notes":msg,"updated_at":now}
-        if lo is not None and Decimal(str(row["labor_hours"] or "0"))==0:
+        if lo is not None and Decimal(current["labor_hours"] or "0")==0:
             mid=(((lo+hi)/2)/Decimal(".25")).quantize(Decimal("1"),rounding=ROUND_HALF_UP)*Decimal(".25")
             if mid>0 and mid<=24:changes["labor_hours"]=str(mid)
         sql="UPDATE tickets SET "+", ".join(k+"=?" for k in changes)+" WHERE id=?"
         con.execute(sql,(*changes.values(),ticket_id))
         con.execute("INSERT INTO events(ticket_id,timestamp,event,detail) VALUES(?,?,?,?)",
                     (ticket_id,now,"internal_ai_estimate",json.dumps({"hours_auto_draft":changes.get("labor_hours","unchanged")})))
+
+
+def start_estimate(ticket_id):
+    global estimate_ticket
+    with estimate_lock:
+        if estimate_ticket is not None:
+            raise ValueError("An estimate is already running. Wait for it to finish before starting another.")
+        estimate_ticket = ticket_id
+        worker = threading.Thread(target=run_estimate, args=(ticket_id,), daemon=True)
+        try:
+            worker.start()
+        except RuntimeError:
+            estimate_ticket = None
+            raise
+
+
+def run_estimate(ticket_id):
+    global estimate_ticket
+    try:
+        suggest(ticket_id)
+    except Exception:
+        log.exception("Internal estimate failed for ticket %s", ticket_id)
+        with closing(db()) as con, con:
+            con.execute("""INSERT INTO events(ticket_id,timestamp,event,detail)
+                SELECT id,?,'internal_ai_failed','Estimate unavailable. Try again from the job page.'
+                FROM tickets WHERE id=?""", (utc(), ticket_id))
+    finally:
+        with estimate_lock:
+            estimate_ticket = None
+
 
 def save_part(ticket_id, supplier, sku, quantity):
     with db() as con:
@@ -602,8 +640,66 @@ def system_status():
                 (os.getenv("ABD_REPORT_SMTP_APP_PASSWORD") or os.getenv("ABD_IMAP_APP_PASSWORD"))),
             "erp":erp_status()}
 
-def render(rows,catalog=None,calendar_month="",edit_appointment=""):
-    return shop_ui.render(rows,catalog or [],db,amounts,calendar_month,edit_appointment)
+JOB_PAGE_SIZE = 25
+
+
+def render_dashboard(searchparams=None):
+    searchparams = searchparams or {}
+    month = searchparams.get("calendar", [""])[0]
+    edit_appointment = searchparams.get("edit_appointment", [""])[0]
+    partq = searchparams.get("partq", [""])[0].strip()[:100]
+    cursor = 0
+    direction = "before"
+    for key in ("before", "after"):
+        raw = searchparams.get(key, [""])[0]
+        if re.fullmatch(r"[0-9]{1,19}", raw) and 0 < int(raw) <= 2**63 - 1:
+            cursor = int(raw)
+            direction = key
+            break
+    with closing(db()) as con:
+        con.execute("BEGIN")
+        sql = "SELECT id, customer, service, machine, location, status, finalized_at FROM tickets"
+        params = [JOB_PAGE_SIZE + 1]
+        ascending = cursor and direction == "after"
+        if cursor:
+            sql += " WHERE id > ?" if ascending else " WHERE id < ?"
+            params.insert(0, cursor)
+        sql += " ORDER BY id ASC LIMIT ?" if ascending else " ORDER BY id DESC LIMIT ?"
+        rows = con.execute(sql, params).fetchall()
+        more = len(rows) > JOB_PAGE_SIZE
+        rows = rows[:JOB_PAGE_SIZE]
+        if ascending:
+            rows.reverse()
+        catalog = parts.search(con, partq, limit=100) if partq else con.execute(
+            "SELECT * FROM supplier_parts ORDER BY checked_at DESC LIMIT 100").fetchall()
+        query = {k: v for k, v in (("calendar", month), ("edit_appointment", edit_appointment), ("partq", partq)) if v}
+        navigation = []
+        if rows:
+            if (ascending and more) or (not ascending and cursor):
+                url = "/?" + urlencode({**query, "after": rows[0]["id"]}) + "#jobs"
+                navigation.append('<a class="action secondary" href="' + html.escape(url) + '">Newer jobs</a>')
+            if ascending or more:
+                url = "/?" + urlencode({**query, "before": rows[-1]["id"]}) + "#jobs"
+                navigation.append('<a class="action secondary" href="' + html.escape(url) + '">Older jobs</a>')
+        if cursor and not rows:
+            url = "/?" + urlencode(query) + "#jobs"
+            navigation.append('<a class="action secondary" href="' + html.escape(url) + '">Newest jobs</a>')
+        pagination = '<div class="footactions">' + "".join(navigation) + '</div>' if navigation else ""
+        return shop_ui.render(rows, catalog, con, amounts, month, edit_appointment, pagination)
+
+
+def render_ticket(ticket_id):
+    if not 0 < ticket_id <= 2**63 - 1:
+        return None
+    with closing(db()) as con:
+        con.execute("BEGIN")
+        ticket = con.execute("SELECT * FROM tickets WHERE id=?", (ticket_id,)).fetchone()
+        if ticket is None:
+            return None
+        with estimate_lock:
+            running = estimate_ticket == ticket_id
+        return shop_ui.ticket_page(ticket, con, amounts, running)
+
 
 class Handler(BaseHTTPRequestHandler):
     def response_headers(self,code=200,typ="text/html; charset=utf-8",csp=None):
@@ -645,12 +741,15 @@ class Handler(BaseHTTPRequestHandler):
                 lookup=job_reports.google_search_link(searchparams["googlepart"][0],
                       searchparams.get("vehicle",[""])[0])
                 self.send_response(303);self.send_header("Location",lookup);self.end_headers();return
-            with db() as con:
-                rows=con.execute("SELECT * FROM tickets ORDER BY id DESC LIMIT 500").fetchall()
-                partq=parse_qs(urlsplit(self.path).query).get("partq",[""])[0].strip()
-                catalog=parts.search(con,partq[:100],limit=100) if partq else con.execute("SELECT * FROM supplier_parts ORDER BY checked_at DESC LIMIT 100").fetchall()
-            return self.response_text(render(rows,catalog,searchparams.get("calendar",[""])[0],
-                                             searchparams.get("edit_appointment",[""])[0]))
+            return self.response_text(render_dashboard(searchparams))
+        if path=="/ready":
+            return self.response_text("ready", typ="text/plain; charset=utf-8")
+        ticket_match=re.fullmatch(r"/ticket/([0-9]{1,19})",path)
+        if ticket_match:
+            page=render_ticket(int(ticket_match.group(1)))
+            if page is not None:
+                return self.response_text(page)
+            return self.response_text("Job not found",404,"text/plain")
         if path=="/bank/export.csv":
             with db() as con:
                 data=io.StringIO()
@@ -823,7 +922,7 @@ class Handler(BaseHTTPRequestHandler):
                 if action=="update":update_ticket(ident_id,data)
                 if action=="finalize":finalize_ticket(ident_id,data.get("final_total",""))
                 if action=="complete":finish_job(ident_id,data)
-                if action=="suggest":suggest(ident_id)
+                if action=="suggest":start_estimate(ident_id)
                 if action=="payment":record_customer_payment(ident_id,data)
                 if action=="pay-in-full":pay_invoice_in_full(ident_id)
                 if action=="void-payment":void_customer_payment(ident_id,data)
@@ -832,7 +931,7 @@ class Handler(BaseHTTPRequestHandler):
                 if action=="blue-quote":blue_sync(ident_id,"quote")
                 if action=="blue-order":blue_sync(ident_id,"service_order")
                 if action=="blue-invoice":invoice_native(ident_id)
-            self.send_response(303);self.send_header("Location",f"/#ticket-{ident_id}");self.end_headers()
+            return self.redirect(f"/ticket/{ident_id}")
         except (ValueError,LookupError,KeyError,blue_bridge.BridgeError) as ex:
             self.response_text("Cannot complete operation: "+html.escape(str(ex)),400)
         except Exception:
