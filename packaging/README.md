@@ -89,3 +89,14 @@ On a completed job **after the ERP connector is initialized**, El Grande queues 
 The integration build checks **a real BlueSeer Java server backed by a disposable copy of the bundled SQLite database**, completing native login, item master creation, business-site setup, customer creation, quote and service-order creation, native read-back idempotency, and a test AR/GL invoice. The disposable invoice test does not post a production transaction. Live production AR/GL posting stays disabled until the company's tax, chart of accounts and invoice settings have been confirmed.
 
 Upgrading to 0.4.0 preserves the existing local ticket and BlueSeer databases. No email credentials are needed to run the native ERP integration. Gmail remains optional.
+
+
+## El Grande 0.5.0 — invoice posting is enabled, not disabled
+
+A finalized customer job with a nonzero bill now enters the durable BlueSeer work queue even when the ERP is temporarily unavailable. After the connector authenticates, it creates/verifies the customer, creates/verifies the native service order for the **final customer bill**, reserves a BlueSeer shipper/invoice ID, and posts/validates the native AR/GL invoice. The actual customer bill is authoritative even when it differs from an earlier internal estimate. Completion labor/parts figures are costs, not substitute customer sale prices; the full final bill is posted as one completed-service charge so the invoiced amount is never an invented breakdown.
+
+The installer configures `ABD_BLUESEER_ENABLE_LIVE_INVOICES=yes`, and native invoicing does not depend on a hidden disable flag. Each job's native invoice ID and state are recorded in `blue_sync`; an ambiguous response marks the invoice for reconciliation rather than blindly replaying the charge. Gmail authorization remains optional. Existing completed records are not retroactively sent to financial ledgers without explicit handling.
+
+**Gross allocation is off the top:** Tomey General is entitled to 15% of the full customer invoice before any operating costs. The operator's 85% bears their expenses. The 15% allocation is tracked in job calculations/reports and is not a customer discount or a 15% reduction of invoice revenue. Native AR/GL invoicing is not itself a bank transfer to the parent.
+
+Production tax-code configuration remains an independent accounting matter; posting an invoice with no tax code is not proof of the proper sales tax treatment. Operators should set applicable tax rules in the accounting system; this release does not fabricate rates or claim that tax configuration was verified.
