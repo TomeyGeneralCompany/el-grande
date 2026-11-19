@@ -633,6 +633,23 @@ class Handler(BaseHTTPRequestHandler):
                 partq=parse_qs(urlsplit(self.path).query).get("partq",[""])[0].strip()
                 catalog=parts.search(con,partq[:100],limit=100) if partq else con.execute("SELECT * FROM supplier_parts ORDER BY checked_at DESC LIMIT 100").fetchall()
             return self.response_text(render(rows,catalog))
+        if path=="/bank/export.csv":
+            with db() as con:
+                data=io.StringIO()
+                wr=csv.writer(data)
+                wr.writerow(["entry_id","account","date","direction","amount","category","memo","reference","source","created_at","reversal_of"])
+                rows=con.execute("""SELECT e.*,a.name account_name FROM money_entries e
+                    JOIN money_accounts a ON a.id=e.account_id ORDER BY e.entry_date,e.id""")
+                for row in rows:
+                    signed=int(row["amount_cents"])
+                    def safe(s):
+                        s=str(s or "")
+                        return "'"+s if s.lstrip().startswith(("=","+","-","@")) else s
+                    wr.writerow([row["id"],safe(row["account_name"]),row["entry_date"],
+                        "in" if signed>=0 else "out",bank_ledger.amount(abs(signed)),
+                        row["category"],safe(row["memo"]),safe(row["reference"]),
+                        row["source"],row["created_at"],row["reversal_of"] or ""])
+            return self.response_text(data.getvalue(),typ="text/csv; charset=utf-8")
         if path=="/bank":
             with db() as con:
                 bank_ledger.init(con)
