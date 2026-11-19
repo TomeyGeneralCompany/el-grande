@@ -29,3 +29,12 @@ if [ "$success" -ne 1 ]; then
   exit 1
 fi
 echo "BlueSeer local ERP API responded on loopback (expected 401 for unauthenticated GET)."
+# Exercise the actual packaged Java API and seed SQLite database, not a mock.
+# The test uses an isolated copy and never posts an invoice or touches live data.
+mkdir -p "$ROOT/build/smoke-java/xdg"
+ABD_BOOTSTRAP_DB="$ROOT/build/smoke-java/data/en/bsdb.db" \
+ABD_BOOTSTRAP_ENV="$ROOT/build/smoke-java/desk.env" \
+ABD_BLUESEER_URL="http://127.0.0.1:18088/bsapi" \
+PYTHONPATH="$ROOT/integrations/all_by_devoll" \
+python3 "$ROOT/integrations/all_by_devoll/erp_bootstrap.py"
+
