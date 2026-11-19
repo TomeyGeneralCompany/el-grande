@@ -31,6 +31,7 @@ import invoice_bridge
 import job_reports
 import shop_ui
 import office_settings
+import erp_jobs
 import urllib.error
 import customer_bridge
 from urllib.parse import parse_qs, urlsplit
@@ -117,7 +118,7 @@ def db():
 
 def init():
     with db() as con:
-        con.executescript(SCHEMA + parts.DDL + job_reports.DDL + """
+        con.executescript(SCHEMA + parts.DDL + job_reports.DDL + erp_jobs.DDL + """
         CREATE TABLE IF NOT EXISTS blue_sync (
           ticket_id INTEGER NOT NULL, kind TEXT NOT NULL,
           record_number TEXT NOT NULL, state TEXT NOT NULL,
@@ -333,6 +334,16 @@ def finish_job(ticket_id,data):
         con.execute("INSERT INTO events(ticket_id,timestamp,event,detail) VALUES(?,?,?,?)",
                     (ticket_id,now,"bill_finalized",str(final)))
         job_reports.queue_report(con,ticket_id)
+        if erp_jobs.eligible():
+            erp_jobs.enqueue(con,ticket_id)
+
+def erp_poller():
+    while True:
+        try:
+            erp_jobs.process_once(db,amounts)
+        except Exception:
+            log.exception("ERP job synchronization failed; job records are retained")
+        time.sleep(30)
 
 def report_poller():
     while True:
@@ -693,6 +704,7 @@ def main():
     # works without a terminal or service restart.
     threading.Thread(target=poller,daemon=True).start()
     threading.Thread(target=report_poller,daemon=True).start()
+    threading.Thread(target=erp_poller,daemon=True).start()
     if any(os.getenv(p+"_URL") for p in ("ABD_DETROIT_AXLE","ABD_AUTOZONE","ABD_PARTS_FEED")):
         threading.Thread(target=parts_poller,daemon=True).start()
     else:log.warning("Mailbox importer disabled; configure ABD_IMAP_USER and ABD_IMAP_APP_PASSWORD")
