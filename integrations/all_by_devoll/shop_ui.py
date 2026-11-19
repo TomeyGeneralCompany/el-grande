@@ -193,8 +193,8 @@ def render(rows,catalog,db,amounts,system=None):
               field("actual_parts_cost","Actual parts cost ($)",ticket["parts_cost"],"number",step=".01")+
               field("actual_other_cost","Other expenses ($)","0","number",step=".01")+
               field("actual_invoice","Final customer bill ($)",f'{a["total"]:.2f}',"number",required=True,step=".01")+
-              '</div><h3>Payment received (optional)</h3>'
-              '<p class="small muted">Leave blank if the customer has not paid. Enter cash collected now if paid at the job.</p>'
+              '</div><h3>Customer paid now? (optional)</h3>'
+              '<p class="small muted">If unpaid, leave the amount blank. Cash is the default.</p>'
               '<div class="fields">'+field("amount_received","Cash handed over ($)","", "number",step=".01")+
               field("paid_on","Payment date",date.today().isoformat(),"date")+
               '</div><input type="hidden" name="method" value="cash">'
@@ -203,7 +203,7 @@ def render(rows,catalog,db,amounts,system=None):
             native_html='<details class="inner"><summary>BlueSeer accounting</summary>'
             if sync:
                 native_html+='<p class="small muted">'+esc(", ".join(x["kind"]+": "+x["state"] for x in sync))+'</p>'
-            native_html+='<p class="small muted">BlueSeer customer and order records synchronize automatically after job completion.</p>'
+            native_html+='<p class="small muted">BlueSeer customer and service-order records synchronize after job completion.</p>'
             native_html+='<form method="post" action="/ticket/'+str(n)+'/update">'
             native_html+=field("blue_customer","ERP customer code",ticket["blue_customer"])
             native_html+=field("blue_ship_to","ERP ship-to code",ticket["blue_ship_to"])
@@ -225,190 +225,47 @@ def render(rows,catalog,db,amounts,system=None):
                         ("BlueSeer order",esc(state_name(native["state"]) if native else "Not queued"))))+'</div></section>')
             else:
                 inner.append('<section class="worksection"><h3>Finalized job</h3><p>Invoice: $'+esc(ticket["bill_total"])+'</p></section>')
-            method_labels={"cash":"Cash","check":"Check","card":"Card","bank_transfer":"Bank transfer","other":"Other"}
-            payment_summary=('<section class="worksection"><h3>Customer payments</h3>'
-                             '<div class="jobinfo">'
-                             '<div><span>Final bill (tax included in price)</span><b>
-        items.append('<details class="ticket" id="ticket-'+str(n)+'">'+jobheader+
-                     '<div class="jobbody">'+jobinfo+''.join(inner)+'</div></details>')
-    if not items:
-        items.append('<div class="empty">No jobs yet. Create a ticket below or connect the business inbox.</div>')
-    newfields=''.join(field(k,t,required=k in ("customer","problem"),placeholder=p) for k,t,p in (
-        ("customer","Customer","Name"),("phone","Phone","Callback number"),
-        ("location","Location","City or township"),("service","Service","Repair, scrap, removal"),
-        ("machine","Vehicle or equipment","Year / make / model"),
-        ("mobility","Where is it?","At shop, mobile, roadside"),
-        ("problem","Customer's request","Brief job description")))
-    catalogue=''.join('<li><b>'+esc(p["supplier"])+' · '+esc(p["sku"])+'</b> — '+esc(p["description"])+' · $'+esc(p["unit_cost"])+'</li>' for p in catalog)
-    html_top='''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#123f3e"><title>All by Devoll | Shop Desk</title><style>'''+CSS+'''</style></head><body>
-<header><div class="wrap"><div class="brand"><div class="mark">AD</div><div><strong>ALL BY DEVOLL</strong><small>Mobile repair & service · Shop desk</small></div></div>
-<div class="topmeta">Office workspace <a href="/health">System status</a></div></div></header>
-<nav><div class="wrap"><a href="#jobs">Jobs</a><a href="#new">New request</a><a href="#catalogue">Parts</a><a href="/settings">Settings</a><a href="/export.csv">Export records</a></div></nav><main>
-<div class="intro"><div><p class="eyebrow">Workshop overview</p><h1>Today's job desk</h1><p class="muted">Service requests, estimates and completed jobs in one place.</p></div><a class="action" href="#new">+ New service request</a></div>
-'''
-    content='<div class="cards">'+stats+'</div>'
-    content+='<section class="panel" id="jobs"><div class="panelhead"><h2>Service jobs</h2><span class="muted small">'+str(len(rows))+' shown · Most recent first</span></div>'+''.join(items)+'</section>'
-    content+='<section class="panel" id="new"><div class="panelhead"><h2>New service request</h2><span class="muted small">Phone calls and walk-ins</span></div><form method="post" action="/ticket/new"><div class="fields">'+newfields+'</div><div class="footactions">'+button("Create job")+'</div></form></section>'
-    content+='<section class="panel" id="catalogue"><div class="panelhead"><h2>Parts catalogue</h2><span class="muted small">Supplier reference and price lookup</span></div>'
-    content+='<div class="links"><a href="https://detroitaxle.com/parts" target="_blank" rel="noopener noreferrer">Detroit Axle catalogue ↗</a><a href="https://www.autozonepro.com/" target="_blank" rel="noopener noreferrer">AutoZonePro ↗</a></div>'
-    content+='<form method="get" action="/" class="inlineform">'+field("partq","Search catalogue",placeholder="Part number or description")+button("Search parts")+'</form>'
-    content+='<ul class="catalog list">'+(catalogue or '<li>No supplier parts loaded. You can still search market prices within any job.</li>')+'</ul>'
-    content+='<details class="inner"><summary>Import supplier prices (CSV)</summary><form method="post" action="/parts/import"><label>Paste catalogue CSV<textarea name="catalog"></textarea></label>'+button("Import prices")+'</form></details>'
-    content+=postform('/parts/fetch',"Refresh connected supplier feeds","action secondary")+'</section>'
-
-    return html_top+content+'</main><footer><div class="wrap">All by Devoll · Internal office system</div></footer></body></html>'
-+f'{paid_state["invoice"]:,.2f}'+'</b></div>'
-                             '<div><span>Received</span><b>
-        items.append('<details class="ticket" id="ticket-'+str(n)+'">'+jobheader+
-                     '<div class="jobbody">'+jobinfo+''.join(inner)+'</div></details>')
-    if not items:
-        items.append('<div class="empty">No jobs yet. Create a ticket below or connect the business inbox.</div>')
-    newfields=''.join(field(k,t,required=k in ("customer","problem"),placeholder=p) for k,t,p in (
-        ("customer","Customer","Name"),("phone","Phone","Callback number"),
-        ("location","Location","City or township"),("service","Service","Repair, scrap, removal"),
-        ("machine","Vehicle or equipment","Year / make / model"),
-        ("mobility","Where is it?","At shop, mobile, roadside"),
-        ("problem","Customer's request","Brief job description")))
-    catalogue=''.join('<li><b>'+esc(p["supplier"])+' · '+esc(p["sku"])+'</b> — '+esc(p["description"])+' · $'+esc(p["unit_cost"])+'</li>' for p in catalog)
-    html_top='''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#123f3e"><title>All by Devoll | Shop Desk</title><style>'''+CSS+'''</style></head><body>
-<header><div class="wrap"><div class="brand"><div class="mark">AD</div><div><strong>ALL BY DEVOLL</strong><small>Mobile repair & service · Shop desk</small></div></div>
-<div class="topmeta">Office workspace <a href="/health">System status</a></div></div></header>
-<nav><div class="wrap"><a href="#jobs">Jobs</a><a href="#new">New request</a><a href="#catalogue">Parts</a><a href="/settings">Settings</a><a href="/export.csv">Export records</a></div></nav><main>
-<div class="intro"><div><p class="eyebrow">Workshop overview</p><h1>Today's job desk</h1><p class="muted">Service requests, estimates and completed jobs in one place.</p></div><a class="action" href="#new">+ New service request</a></div>
-'''
-    content='<div class="cards">'+stats+'</div>'
-    content+='<section class="panel" id="jobs"><div class="panelhead"><h2>Service jobs</h2><span class="muted small">'+str(len(rows))+' shown · Most recent first</span></div>'+''.join(items)+'</section>'
-    content+='<section class="panel" id="new"><div class="panelhead"><h2>New service request</h2><span class="muted small">Phone calls and walk-ins</span></div><form method="post" action="/ticket/new"><div class="fields">'+newfields+'</div><div class="footactions">'+button("Create job")+'</div></form></section>'
-    content+='<section class="panel" id="catalogue"><div class="panelhead"><h2>Parts catalogue</h2><span class="muted small">Supplier reference and price lookup</span></div>'
-    content+='<div class="links"><a href="https://detroitaxle.com/parts" target="_blank" rel="noopener noreferrer">Detroit Axle catalogue ↗</a><a href="https://www.autozonepro.com/" target="_blank" rel="noopener noreferrer">AutoZonePro ↗</a></div>'
-    content+='<form method="get" action="/" class="inlineform">'+field("partq","Search catalogue",placeholder="Part number or description")+button("Search parts")+'</form>'
-    content+='<ul class="catalog list">'+(catalogue or '<li>No supplier parts loaded. You can still search market prices within any job.</li>')+'</ul>'
-    content+='<details class="inner"><summary>Import supplier prices (CSV)</summary><form method="post" action="/parts/import"><label>Paste catalogue CSV<textarea name="catalog"></textarea></label>'+button("Import prices")+'</form></details>'
-    content+=postform('/parts/fetch',"Refresh connected supplier feeds","action secondary")+'</section>'
-
-    return html_top+content+'</main><footer><div class="wrap">All by Devoll · Internal office system</div></footer></body></html>'
-+f'{paid_state["received"]:,.2f}'+'</b></div>'
-                             '<div><span>Still owed</span><b>
-        items.append('<details class="ticket" id="ticket-'+str(n)+'">'+jobheader+
-                     '<div class="jobbody">'+jobinfo+''.join(inner)+'</div></details>')
-    if not items:
-        items.append('<div class="empty">No jobs yet. Create a ticket below or connect the business inbox.</div>')
-    newfields=''.join(field(k,t,required=k in ("customer","problem"),placeholder=p) for k,t,p in (
-        ("customer","Customer","Name"),("phone","Phone","Callback number"),
-        ("location","Location","City or township"),("service","Service","Repair, scrap, removal"),
-        ("machine","Vehicle or equipment","Year / make / model"),
-        ("mobility","Where is it?","At shop, mobile, roadside"),
-        ("problem","Customer's request","Brief job description")))
-    catalogue=''.join('<li><b>'+esc(p["supplier"])+' · '+esc(p["sku"])+'</b> — '+esc(p["description"])+' · $'+esc(p["unit_cost"])+'</li>' for p in catalog)
-    html_top='''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#123f3e"><title>All by Devoll | Shop Desk</title><style>'''+CSS+'''</style></head><body>
-<header><div class="wrap"><div class="brand"><div class="mark">AD</div><div><strong>ALL BY DEVOLL</strong><small>Mobile repair & service · Shop desk</small></div></div>
-<div class="topmeta">Office workspace <a href="/health">System status</a></div></div></header>
-<nav><div class="wrap"><a href="#jobs">Jobs</a><a href="#new">New request</a><a href="#catalogue">Parts</a><a href="/settings">Settings</a><a href="/export.csv">Export records</a></div></nav><main>
-<div class="intro"><div><p class="eyebrow">Workshop overview</p><h1>Today's job desk</h1><p class="muted">Service requests, estimates and completed jobs in one place.</p></div><a class="action" href="#new">+ New service request</a></div>
-'''
-    content='<div class="cards">'+stats+'</div>'
-    content+='<section class="panel" id="jobs"><div class="panelhead"><h2>Service jobs</h2><span class="muted small">'+str(len(rows))+' shown · Most recent first</span></div>'+''.join(items)+'</section>'
-    content+='<section class="panel" id="new"><div class="panelhead"><h2>New service request</h2><span class="muted small">Phone calls and walk-ins</span></div><form method="post" action="/ticket/new"><div class="fields">'+newfields+'</div><div class="footactions">'+button("Create job")+'</div></form></section>'
-    content+='<section class="panel" id="catalogue"><div class="panelhead"><h2>Parts catalogue</h2><span class="muted small">Supplier reference and price lookup</span></div>'
-    content+='<div class="links"><a href="https://detroitaxle.com/parts" target="_blank" rel="noopener noreferrer">Detroit Axle catalogue ↗</a><a href="https://www.autozonepro.com/" target="_blank" rel="noopener noreferrer">AutoZonePro ↗</a></div>'
-    content+='<form method="get" action="/" class="inlineform">'+field("partq","Search catalogue",placeholder="Part number or description")+button("Search parts")+'</form>'
-    content+='<ul class="catalog list">'+(catalogue or '<li>No supplier parts loaded. You can still search market prices within any job.</li>')+'</ul>'
-    content+='<details class="inner"><summary>Import supplier prices (CSV)</summary><form method="post" action="/parts/import"><label>Paste catalogue CSV<textarea name="catalog"></textarea></label>'+button("Import prices")+'</form></details>'
-    content+=postform('/parts/fetch',"Refresh connected supplier feeds","action secondary")+'</section>'
-
-    return html_top+content+'</main><footer><div class="wrap">All by Devoll · Internal office system</div></footer></body></html>'
-+f'{paid_state["due"]:,.2f}'+'</b></div></div>')
+            method_labels={"cash":"Cash","check":"Check","card":"Card",
+                           "bank_transfer":"Bank transfer","other":"Other"}
+            payment_html=('<section class="worksection"><h3>Customer payments</h3>'
+                          '<div class="jobinfo">'
+                          '<div><span>Final bill (tax included)</span><b>$'+format(paid_state["invoice"],",.2f")+'</b></div>'
+                          '<div><span>Received</span><b>$'+format(paid_state["received"],",.2f")+'</b></div>'
+                          '<div><span>Still owed</span><b>$'+format(paid_state["due"],",.2f")+'</b></div></div>')
             if paid_state["due"]>0:
                 choices=''.join('<option value="'+esc(k)+'"'+(' selected' if k=="cash" else '')+'>'+v+'</option>' for k,v in method_labels.items())
-                payment_summary+=('<form method="post" action="/ticket/'+str(n)+'/payment">'
-                    '<div class="fields">'+field("amount_received","Amount customer handed over ($)",f'{paid_state["due"]:.2f}',"number",required=True,step=".01")+
-                    '<label>Payment method<select name="method">'+choices+'</select></label>'+
-                    field("paid_on","Date paid",date.today().isoformat(),"date")+
-                    field("reference","Check / transaction reference (optional)")+
-                    '</div>'+button("Record payment")+'</form>'
-                    '<p class="small muted">For cash, enter the amount handed over. Any amount above what is owed is recorded as change returned.</p>')
+                payment_html+=('<form method="post" action="/ticket/'+str(n)+'/payment">'
+                    '<div class="fields">'
+                    +field("amount_received","Amount customer handed over ($)",format(paid_state["due"],".2f"),"number",required=True,step=".01")
+                    +'<label>Payment method<select name="method">'+choices+'</select></label>'
+                    +field("paid_on","Date paid",date.today().isoformat(),"date")
+                    +field("reference","Check / transaction reference (optional)")
+                    +'</div>'+button("Record payment")+'</form>'
+                    '<p class="small muted">With cash, enter the amount handed over. Excess is recorded as change returned.</p>')
             else:
-                payment_summary+='<p class="pill done">Paid in full</p>'
+                payment_html+='<p class="pill done">Paid in full</p>'
             if receipts:
-                payment_summary+='<h3>Payment history</h3><ul class="list">'
+                payment_html+='<h3>Payment history</h3><ul class="list">'
                 for receipt in receipts:
-                    detail=('
-        items.append('<details class="ticket" id="ticket-'+str(n)+'">'+jobheader+
-                     '<div class="jobbody">'+jobinfo+''.join(inner)+'</div></details>')
-    if not items:
-        items.append('<div class="empty">No jobs yet. Create a ticket below or connect the business inbox.</div>')
-    newfields=''.join(field(k,t,required=k in ("customer","problem"),placeholder=p) for k,t,p in (
-        ("customer","Customer","Name"),("phone","Phone","Callback number"),
-        ("location","Location","City or township"),("service","Service","Repair, scrap, removal"),
-        ("machine","Vehicle or equipment","Year / make / model"),
-        ("mobility","Where is it?","At shop, mobile, roadside"),
-        ("problem","Customer's request","Brief job description")))
-    catalogue=''.join('<li><b>'+esc(p["supplier"])+' · '+esc(p["sku"])+'</b> — '+esc(p["description"])+' · $'+esc(p["unit_cost"])+'</li>' for p in catalog)
-    html_top='''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#123f3e"><title>All by Devoll | Shop Desk</title><style>'''+CSS+'''</style></head><body>
-<header><div class="wrap"><div class="brand"><div class="mark">AD</div><div><strong>ALL BY DEVOLL</strong><small>Mobile repair & service · Shop desk</small></div></div>
-<div class="topmeta">Office workspace <a href="/health">System status</a></div></div></header>
-<nav><div class="wrap"><a href="#jobs">Jobs</a><a href="#new">New request</a><a href="#catalogue">Parts</a><a href="/settings">Settings</a><a href="/export.csv">Export records</a></div></nav><main>
-<div class="intro"><div><p class="eyebrow">Workshop overview</p><h1>Today's job desk</h1><p class="muted">Service requests, estimates and completed jobs in one place.</p></div><a class="action" href="#new">+ New service request</a></div>
-'''
-    content='<div class="cards">'+stats+'</div>'
-    content+='<section class="panel" id="jobs"><div class="panelhead"><h2>Service jobs</h2><span class="muted small">'+str(len(rows))+' shown · Most recent first</span></div>'+''.join(items)+'</section>'
-    content+='<section class="panel" id="new"><div class="panelhead"><h2>New service request</h2><span class="muted small">Phone calls and walk-ins</span></div><form method="post" action="/ticket/new"><div class="fields">'+newfields+'</div><div class="footactions">'+button("Create job")+'</div></form></section>'
-    content+='<section class="panel" id="catalogue"><div class="panelhead"><h2>Parts catalogue</h2><span class="muted small">Supplier reference and price lookup</span></div>'
-    content+='<div class="links"><a href="https://detroitaxle.com/parts" target="_blank" rel="noopener noreferrer">Detroit Axle catalogue ↗</a><a href="https://www.autozonepro.com/" target="_blank" rel="noopener noreferrer">AutoZonePro ↗</a></div>'
-    content+='<form method="get" action="/" class="inlineform">'+field("partq","Search catalogue",placeholder="Part number or description")+button("Search parts")+'</form>'
-    content+='<ul class="catalog list">'+(catalogue or '<li>No supplier parts loaded. You can still search market prices within any job.</li>')+'</ul>'
-    content+='<details class="inner"><summary>Import supplier prices (CSV)</summary><form method="post" action="/parts/import"><label>Paste catalogue CSV<textarea name="catalog"></textarea></label>'+button("Import prices")+'</form></details>'
-    content+=postform('/parts/fetch',"Refresh connected supplier feeds","action secondary")+'</section>'
-
-    return html_top+content+'</main><footer><div class="wrap">All by Devoll · Internal office system</div></footer></body></html>'
-+esc(receipt["applied"])+' applied · '+esc(method_labels.get(receipt["method"],receipt["method"]))+
-                            ' · '+esc(receipt["paid_on"]))
+                    detail=('$'+esc(receipt["applied"])+' applied · '+esc(method_labels.get(receipt["method"],receipt["method"]))
+                            +' · '+esc(receipt["paid_on"]))
                     if receipt["method"]=="cash" and Decimal(receipt["change_given"])>0:
-                        detail+=' · 
-        items.append('<details class="ticket" id="ticket-'+str(n)+'">'+jobheader+
-                     '<div class="jobbody">'+jobinfo+''.join(inner)+'</div></details>')
-    if not items:
-        items.append('<div class="empty">No jobs yet. Create a ticket below or connect the business inbox.</div>')
-    newfields=''.join(field(k,t,required=k in ("customer","problem"),placeholder=p) for k,t,p in (
-        ("customer","Customer","Name"),("phone","Phone","Callback number"),
-        ("location","Location","City or township"),("service","Service","Repair, scrap, removal"),
-        ("machine","Vehicle or equipment","Year / make / model"),
-        ("mobility","Where is it?","At shop, mobile, roadside"),
-        ("problem","Customer's request","Brief job description")))
-    catalogue=''.join('<li><b>'+esc(p["supplier"])+' · '+esc(p["sku"])+'</b> — '+esc(p["description"])+' · $'+esc(p["unit_cost"])+'</li>' for p in catalog)
-    html_top='''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#123f3e"><title>All by Devoll | Shop Desk</title><style>'''+CSS+'''</style></head><body>
-<header><div class="wrap"><div class="brand"><div class="mark">AD</div><div><strong>ALL BY DEVOLL</strong><small>Mobile repair & service · Shop desk</small></div></div>
-<div class="topmeta">Office workspace <a href="/health">System status</a></div></div></header>
-<nav><div class="wrap"><a href="#jobs">Jobs</a><a href="#new">New request</a><a href="#catalogue">Parts</a><a href="/settings">Settings</a><a href="/export.csv">Export records</a></div></nav><main>
-<div class="intro"><div><p class="eyebrow">Workshop overview</p><h1>Today's job desk</h1><p class="muted">Service requests, estimates and completed jobs in one place.</p></div><a class="action" href="#new">+ New service request</a></div>
-'''
-    content='<div class="cards">'+stats+'</div>'
-    content+='<section class="panel" id="jobs"><div class="panelhead"><h2>Service jobs</h2><span class="muted small">'+str(len(rows))+' shown · Most recent first</span></div>'+''.join(items)+'</section>'
-    content+='<section class="panel" id="new"><div class="panelhead"><h2>New service request</h2><span class="muted small">Phone calls and walk-ins</span></div><form method="post" action="/ticket/new"><div class="fields">'+newfields+'</div><div class="footactions">'+button("Create job")+'</div></form></section>'
-    content+='<section class="panel" id="catalogue"><div class="panelhead"><h2>Parts catalogue</h2><span class="muted small">Supplier reference and price lookup</span></div>'
-    content+='<div class="links"><a href="https://detroitaxle.com/parts" target="_blank" rel="noopener noreferrer">Detroit Axle catalogue ↗</a><a href="https://www.autozonepro.com/" target="_blank" rel="noopener noreferrer">AutoZonePro ↗</a></div>'
-    content+='<form method="get" action="/" class="inlineform">'+field("partq","Search catalogue",placeholder="Part number or description")+button("Search parts")+'</form>'
-    content+='<ul class="catalog list">'+(catalogue or '<li>No supplier parts loaded. You can still search market prices within any job.</li>')+'</ul>'
-    content+='<details class="inner"><summary>Import supplier prices (CSV)</summary><form method="post" action="/parts/import"><label>Paste catalogue CSV<textarea name="catalog"></textarea></label>'+button("Import prices")+'</form></details>'
-    content+=postform('/parts/fetch',"Refresh connected supplier feeds","action secondary")+'</section>'
-
-    return html_top+content+'</main><footer><div class="wrap">All by Devoll · Internal office system</div></footer></body></html>'
-+esc(receipt["change_given"])+' change returned'
+                        detail+=' · $'+esc(receipt["change_given"])+' change returned'
                     if receipt["reference"]:
                         detail+=' · '+esc(receipt["reference"])
                     if receipt["voided_at"]:
                         detail+=' · VOIDED ('+esc(receipt["void_reason"])+')'
-                    payment_summary+='<li>'+detail
+                    payment_html+='<li>'+detail
                     if not receipt["voided_at"]:
-                        payment_summary+=('<details class="inner"><summary>Correct this payment</summary>'
+                        payment_html+=('<details class="inner"><summary>Correct payment</summary>'
                            '<form method="post" action="/ticket/'+str(n)+'/void-payment">'
                            '<input type="hidden" name="payment_id" value="'+str(receipt["id"])+'">'
                            +field("reason","Reason for voiding",required=True)
                            +button("Void payment entry","action secondary")+'</form></details>')
-                    payment_summary+='</li>'
-                payment_summary+='</ul>'
-            payment_summary+='</section>'
-            inner.append(payment_summary)
+                    payment_html+='</li>'
+                payment_html+='</ul>'
+            payment_html+='</section>'
+            inner.append(payment_html)
         items.append('<details class="ticket" id="ticket-'+str(n)+'">'+jobheader+
                      '<div class="jobbody">'+jobinfo+''.join(inner)+'</div></details>')
     if not items:
