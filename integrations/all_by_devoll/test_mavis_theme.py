@@ -26,14 +26,14 @@ class MavisThemeTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_reference_palette_is_shared(self):
-        for name,color in (("--app-red","#c90028"),
+        for name,color in (("--app-red","#e09915"),
                            ("--panel-teal","#00c4bf"),
                            ("--white","#ffffff")):
             self.assertIn(name,mavis_theme.CSS)
             self.assertIn(color,mavis_theme.CSS)
         self.assertIn("border-radius:50%",mavis_theme.CSS)
         self.assertIn("grid-template-columns",mavis_theme.CSS)
-        self.assertIn("background:#c90028",mavis_theme.CSS)
+        self.assertIn("background:#e09915",mavis_theme.CSS)
         self.assertIn("color:#fff",mavis_theme.CSS)
 
     def test_job_desk_uses_same_mavis_style(self):
@@ -42,10 +42,10 @@ class MavisThemeTests(unittest.TestCase):
         output=shop_ui.render(jobs,[],desk.db,desk.amounts,{
             "mailbox":False,"report":False,
             "erp":{"running":False,"configured":False}})
-        self.assertIn("ALL BY DEVOLL",output)
+        self.assertIn("All by Devoll, LLC",output)
         self.assertIn('href="/bank"',output)
         self.assertIn("--panel-teal: #00c4bf",output)
-        self.assertIn("background:#c90028",output)
+        self.assertIn("background:#e09915",output)
         self.assertIn("Cash received today",output)
         self.assertIn("New service request",output)
 
@@ -55,7 +55,7 @@ class MavisThemeTests(unittest.TestCase):
         self.assertIn("Count cash in the safe",output)
         self.assertIn("Transfer / cash deposit",output)
         self.assertIn("--panel-teal: #00c4bf",output)
-        self.assertIn("background:#c90028",output)
+        self.assertIn("background:#e09915",output)
         self.assertIn("Recorded register balance",output)
 
     def test_settings_uses_same_mavis_style_without_secret_reflection(self):
@@ -71,7 +71,7 @@ class MavisThemeTests(unittest.TestCase):
         self.assertIn("Plaid.create",output)
         self.assertIn("mock-link-token",output)
         self.assertIn("--panel-teal: #00c4bf",output)
-        self.assertIn("background:#c90028",output)
+        self.assertIn("background:#e09915",output)
 
 if __name__=="__main__":
     unittest.main()
