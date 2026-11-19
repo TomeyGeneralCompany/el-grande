@@ -696,6 +696,12 @@ class Handler(BaseHTTPRequestHandler):
             if path=="/settings/save":
                 office_settings.save(data)
                 return self.redirect("/settings?status=saved")
+            if path=="/settings/save-bank":
+                try:
+                    office_settings.save_bank(data)
+                except (ValueError,OSError,blue_bridge.BridgeError):
+                    return self.redirect("/settings?status=bank-failed")
+                return self.redirect("/settings?status=bank-saved")
             if path=="/settings/test-gmail":
                 try:
                     office_settings.test_gmail()
