@@ -130,7 +130,8 @@ def post(client,receipt,invoice_no,invoice_customer,bank_code,kind):
     customer=client.get("dataServCUS","getCustMstr",invoice_customer)
     if not isinstance(customer,dict) or customer.get("cm_code")!=invoice_customer or not customer.get("cm_ar_acct"):
         raise ValueError("Native customer AR account is not configured")
-    dated=receipt["paid_on"]
+    dated=(receipt["voided_at"][:10] if kind=="reversal" and receipt["voided_at"]
+           else receipt["paid_on"])
     ref=(receipt["reference"] or ("Cash" if receipt["method"]=="cash" else receipt["method"]))[:100]
     header=blue_bridge.record(AR_FIELDS,
        ar_id=None,ar_nbr=payment_no,ar_cust=invoice_customer,ar_amt=float(amount),
@@ -170,7 +171,8 @@ def process_once(db):
                        LEFT JOIN blue_sync b ON b.ticket_id=p.ticket_id AND b.kind='invoice'
                        WHERE q.state IN ('queued','posting','needs_review')
                          AND b.state='posted'
-                       ORDER BY q.payment_id,CASE WHEN q.kind='payment' THEN 0 ELSE 1 END
+                       ORDER BY CASE WHEN q.state='queued' THEN 0 ELSE 1 END,
+                          q.payment_id,CASE WHEN q.kind='payment' THEN 0 ELSE 1 END
                        LIMIT 1""").fetchone()
         if not item:return 0
         payment_id,kind=item["payment_id"],item["kind"]
