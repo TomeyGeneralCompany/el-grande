@@ -104,6 +104,21 @@ class PaymentLedgerTests(unittest.TestCase):
         self.assertIn("Correct payment",html)
         self.assertNotIn("Mark paid",html)
         self.assertNotIn("Complete the accounting setup before creating financial records",html)
+    def test_daily_cash_is_net_applied_and_excludes_voided(self):
+        self.complete("200")
+        cash,_=desk.record_customer_payment(self.ident,{
+            "amount_received":"110","method":"cash"})
+        desk.record_customer_payment(self.ident,{
+            "amount_received":"30","method":"check"})
+        with desk.db() as con:
+            rows=con.execute("SELECT * FROM tickets").fetchall()
+        html=shop_ui.render(rows,[],desk.db,desk.amounts)
+        self.assertIn("Cash received today",html)
+        self.assertIn("$110.00",html)
+        desk.void_customer_payment(self.ident,{
+            "payment_id":cash,"reason":"Wrong cash amount was entered"})
+        html=shop_ui.render(rows,[],desk.db,desk.amounts)
+        self.assertIn("$0.00",html)
     def test_only_completed_jobs_accept_payment(self):
         with self.assertRaises(ValueError):
             desk.record_customer_payment(self.ident,{"amount_received":"20"})
