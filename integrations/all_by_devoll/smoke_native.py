@@ -52,6 +52,15 @@ def main():
     assert quote_second[1]=="exists"
     assert order_second[1]=="exists"
     print("Native ERP integration PASS: customer, internal quote, service order, idempotent reads.")
-    print("No invoices or GL entries were posted.")
+    # One controlled native AR/GL transaction in a throwaway database.
+    # The real office installer keeps live invoice posting disabled.
+    import invoice_bridge
+    os.environ["ABD_BLUESEER_ENABLE_LIVE_INVOICES"]="yes"
+    ticket["finalized_at"]="2026-11-18T12:00:00Z"
+    final_math={**total,"basis":total["total"]}
+    shipper=invoice_bridge.reserve_native_shipment_number(client)
+    invoice_bridge.post_native_invoice(ticket,final_math,shipper,client)
+    print("Native ERP disposable invoice confirmed:",shipper)
+    os.environ["ABD_BLUESEER_ENABLE_LIVE_INVOICES"]="no"
 
 if __name__=="__main__":main()
