@@ -203,18 +203,6 @@ def render(rows,catalog,db,amounts,system=None):
               +'</div></details>'
               +'<div class="footactions">'+button("Finish Job & Create Invoice","action danger")+'</div></form></section>')
             inner.append(completedform)
-            native_html='<details class="inner"><summary>BlueSeer accounting</summary>'
-            if sync:
-                native_html+='<p class="small muted">'+esc(", ".join(x["kind"]+": "+x["state"] for x in sync))+'</p>'
-            native_html+='<p class="small muted">BlueSeer customer and service-order records synchronize after job completion.</p>'
-            native_html+='<form method="post" action="/ticket/'+str(n)+'/update">'
-            native_html+=field("blue_customer","ERP customer code",ticket["blue_customer"])
-            native_html+=field("blue_ship_to","ERP ship-to code",ticket["blue_ship_to"])
-            native_html+=button("Save account codes","action secondary")+'</form>'
-            native_html+=('<div class="footactions">'+postform('/ticket/'+str(n)+'/blue-customer',"Create customer","action secondary")
-                          +postform('/ticket/'+str(n)+'/blue-quote',"Save ERP quote","action secondary")
-                          +postform('/ticket/'+str(n)+'/blue-order',"Create service order","action secondary")+'</div></details>')
-            inner.append(native_html)
         else:
             if completed:
                 inner.append('<section class="worksection"><h3>Completed job</h3>'
