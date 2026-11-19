@@ -7,7 +7,6 @@ from pathlib import Path
 from unittest.mock import patch
 import customer_payments
 import desk
-import shop_ui
 
 class PaymentLedgerTests(unittest.TestCase):
     def setUp(self):
@@ -95,9 +94,7 @@ class PaymentLedgerTests(unittest.TestCase):
     def test_cash_form_and_payment_history_render(self):
         self.complete("100")
         desk.record_customer_payment(self.ident,{"amount_received":"40","method":"cash"})
-        with desk.db() as con:
-            rows=con.execute("SELECT * FROM tickets").fetchall()
-        html=shop_ui.render(rows,[],desk.db,desk.amounts)
+        html=desk.render_ticket(self.ident)
         self.assertIn("Record payment",html)
         self.assertIn("Still owed",html)
         self.assertIn("60.00",html)
@@ -110,14 +107,12 @@ class PaymentLedgerTests(unittest.TestCase):
             "amount_received":"110","method":"cash"})
         desk.record_customer_payment(self.ident,{
             "amount_received":"30","method":"check"})
-        with desk.db() as con:
-            rows=con.execute("SELECT * FROM tickets").fetchall()
-        html=shop_ui.render(rows,[],desk.db,desk.amounts)
+        html=desk.render_dashboard()
         self.assertIn("Cash received today",html)
         self.assertIn("$110.00",html)
         desk.void_customer_payment(self.ident,{
             "payment_id":cash,"reason":"Wrong cash amount was entered"})
-        html=shop_ui.render(rows,[],desk.db,desk.amounts)
+        html=desk.render_dashboard()
         self.assertIn("$0.00",html)
     def test_only_completed_jobs_accept_payment(self):
         with self.assertRaises(ValueError):

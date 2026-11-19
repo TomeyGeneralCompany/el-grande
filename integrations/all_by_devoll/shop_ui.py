@@ -5,7 +5,6 @@ No third-party assets, scripts, fonts, analytics, or CDN dependencies.
 """
 import html
 import os
-from collections import Counter
 from decimal import Decimal
 from urllib.parse import urlencode
 
@@ -50,7 +49,7 @@ textarea{min-height:92px;resize:vertical}.fields{display:grid;grid-template-colu
 .footactions{display:flex;flex-wrap:wrap;align-items:center;gap:9px;margin-top:16px}
 .ticket{border:1px solid var(--line);border-radius:12px;margin:12px 0;background:white;overflow:hidden}
 .ticket[open]{border-color:#b3d0c6;box-shadow:0 6px 22px #133e3810}
-.ticket>summary{display:flex;align-items:center;justify-content:space-between;gap:14px;cursor:pointer;list-style:none;padding:17px 19px}
+.ticket>summary,.job-heading{display:flex;align-items:center;justify-content:space-between;gap:14px;cursor:pointer;list-style:none;padding:17px 19px}
 .ticket>summary::-webkit-details-marker{display:none}.jobleft{display:flex;gap:14px;align-items:center;min-width:0}
 .jobid{background:#eef3f1;color:#456866;font-size:12px;font-weight:800;border-radius:8px;padding:10px 9px;white-space:nowrap}
 .jobname{display:block;font-size:16px;font-weight:750}.subline{display:block;color:var(--muted);font-size:12px;margin-top:3px}
@@ -100,175 +99,170 @@ def postform(url,caption,css="action"):
 def state_name(s):
     return str(s).replace("_"," ").title()
 
-def render(rows,catalog,db,amounts,calendar_month="",edit_appointment=""):
-    counts=Counter(r["status"] for r in rows)
-    pending=sum(1 for r in rows if not r["finalized_at"] and r["status"] not in ("cancelled","paid"))
-    complete=sum(1 for r in rows if r["finalized_at"])
-    inprogress=counts["in_progress"]+counts["approved"]
-    new=counts["new"]
-    with db() as con:
-        today_cash=con.execute("""SELECT applied FROM customer_payments
-            WHERE method='cash' AND paid_on=? AND voided_at IS NULL""",
-            (date.today().isoformat(),)).fetchall()
-    daily_cash=sum((Decimal(x["applied"]) for x in today_cash),Decimal("0"))
-    metrics=[("Open jobs",pending),("New requests",new),("Active work",inprogress),
-             ("Completed jobs",complete),("Cash received today","$"+format(daily_cash,",.2f"))]
-    stats=''.join('<div class="metric"><label>'+name+'</label><strong>'+str(value)+'</strong></div>' for name,value in metrics)
-    items=[]
-    for ticket in rows:
-        n=int(ticket["id"])
-        a=amounts(ticket)
-        done=bool(ticket["finalized_at"])
-        with db() as con:
-            attached=con.execute("SELECT * FROM ticket_parts WHERE ticket_id=? ORDER BY supplier,sku",(n,)).fetchall()
-            sync=con.execute("SELECT kind,state,record_number FROM blue_sync WHERE ticket_id=?",(n,)).fetchall()
-            completed=con.execute("SELECT * FROM job_completions WHERE ticket_id=?",(n,)).fetchone()
-            owner=con.execute("SELECT state FROM owner_reports WHERE ticket_id=?",(n,)).fetchone()
-            native=con.execute("SELECT state,last_error FROM erp_jobs WHERE ticket_id=?",(n,)).fetchone()
-            receipts=customer_payments.payments(con,n) if done else []
-            paid_state=customer_payments.balance(con,n) if done else None
-        status=ticket["status"]
-        cls="done" if done else "alert" if status=="new" else ""
-        jobheader=('<summary><div class="jobleft"><span class="jobid">ABD-'+f"{n:06d}"+'</span>'
-                   '<span><span class="jobname">'+esc(ticket["customer"] or "Customer not entered")+'</span>'
-                   '<span class="subline">'+esc(ticket["service"] or "Service request")+' · '+esc(ticket["machine"] or ticket["location"] or "Details pending")+'</span></span></div>'
-                   '<div class="jobright"><span class="pill '+cls+'">'+esc(state_name(status))+'</span>'
-                   '<span class="chev" aria-hidden="true">⌄</span></div></summary>')
-        info="".join('<div><span>'+label+'</span><b>'+esc(value or "Not supplied")+'</b></div>' for label,value in
-                     (("Phone",ticket["phone"]),("Location",ticket["location"]),("Equipment",ticket["machine"]),("Reported problem",ticket["problem"])))
-        jobinfo='<div class="jobinfo">'+info+'</div>'
-        inner=[]
-        if not done:
-            option=''.join('<option value="'+esc(s)+'"'+(' selected' if status==s else '')+'>'+esc(state_name(s))+'</option>'
-                           for s in ("new","estimating","quoted","approved","in_progress","completed","cancelled"))
-            workform=('<form method="post" action="/ticket/'+str(n)+'/update">'
-                      '<div class="fields">'+
-                      ''.join(field(k,title,ticket[k],"number",step=".01") for k,title in
-                              (("labor_hours","Estimated labor hours"),("labor_rate","Hourly rate ($)"),
-                               ("parts_charge","Parts billed ($)"),("parts_cost","Parts purchase cost ($)"),
-                               ("travel_charge","Travel ($)"),("extra_charge","Other charges ($)")))+
-                      '</div><label>Job status<select name="status">'+option+'</select></label>'
-                      '<label>Shop notes<textarea name="notes">'+esc(ticket["notes"])+'</textarea></label>'+
-                      button("Save estimate")+'</form>')
-            left=('<section class="worksection"><h3>Estimate & job notes</h3>'
-                  '<p class="muted">The mechanic reviews this estimate before calling the customer.</p>'
-                  '<div class="price"><span>Current estimated job total</span><strong>$'+f'{a["total"]:,.2f}'+'</strong></div>'
-                  +workform+'</section>')
-            searchurl=job_reports.google_search_link(ticket["problem"][:90] or ticket["service"][:90],ticket["machine"][:120])
-            right=('<section class="worksection"><h3>Parts & research</h3>'
-                   '<div class="links"><a href="'+esc(searchurl)+'" target="_blank" rel="noopener noreferrer">Search job prices on Google ↗</a>'
-                   '<a href="https://detroitaxle.com/parts" target="_blank" rel="noopener noreferrer">Detroit Axle ↗</a>'
-                   '<a href="https://www.autozonepro.com/" target="_blank" rel="noopener noreferrer">AutoZonePro ↗</a></div>'
-                   '<form method="get" action="/" class="inlineform">'+field("googlepart","Search a specific part",placeholder="Starter, brakes, alternator")+
-                   '<input type="hidden" name="vehicle" value="'+esc(ticket["machine"])+'">'+button("Search")+'</form>')
-            if attached:
-                right+='<div class="minisection"><h3>Selected parts</h3><ul class="list">'+''.join(
-                    '<li>'+esc(p["supplier"])+' · '+esc(p["sku"])+' · '+esc(p["description"])+' — $'+esc(p["unit_cost"])+'</li>'
-                    for p in attached)+'</ul></div>'
-            right+=('<details class="inner"><summary>Add a catalogue part</summary><form method="post" action="/ticket/'+str(n)+'/part">'
-                    +field("supplier","Supplier",required=True)+field("sku","Part number",required=True)
-                    +field("quantity","Quantity",value="1",kind="number",step=".01")
-                    +button("Add part")+'</form></details>')
-            right+=('<div class="minisection"><h3>AI assistance</h3>'+
-                    postform('/ticket/'+str(n)+'/suggest',"Generate labor & diagnostic estimate","action secondary")+
-                    ('<pre class="ai">'+esc(ticket["ai_notes"])+'</pre>' if ticket["ai_notes"] else '')+'</div></section>')
-            inner.append('<div class="working">'+left+right+'</div>')
-            completedform=('<section class="worksection" id="finish-'+str(n)+'"><h3>Finish this job</h3>'
-              '<p class="muted">Enter the completed work and the final price. El Grande will prepare the PDF invoice.</p>'
-              '<form method="post" action="/ticket/'+str(n)+'/complete">'
-              '<label>Work performed<textarea name="work_performed" required placeholder="Repair completed, parts installed, work performed">'+esc(ticket["notes"])+'</textarea></label>'
-              +field("actual_invoice","Final customer bill ($)",format(a["total"],".2f"),"number",required=True,step=".01")
-              +'<details class="inner"><summary>Optional: hours and actual job expenses</summary><div class="fields">'
-              +field("started_at","Started",kind="datetime-local")
-              +field("finished_at","Finished",kind="datetime-local")
-              +field("actual_hours","Hours worked",ticket["labor_hours"],"number",step=".01")
-              +field("actual_labor_cost","Actual labor cost ($)","0","number",step=".01")
-              +field("actual_parts_cost","Actual parts cost ($)",ticket["parts_cost"],"number",step=".01")
-              +field("actual_other_cost","Other expenses ($)","0","number",step=".01")
-              +'</div></details>'
-              +'<div class="footactions">'+button("Finish Job & Create Invoice","action danger")+'</div></form></section>')
-            inner.append(completedform)
+def job_heading(ticket):
+    n=int(ticket["id"])
+    status=ticket["status"]
+    cls="done" if ticket["finalized_at"] else "alert" if status=="new" else ""
+    return ('<div class="job-heading"><div class="jobleft"><span class="jobid">ABD-'+f"{n:06d}"+'</span>'
+               '<span><span class="jobname">'+esc(ticket["customer"] or "Customer not entered")+'</span>'
+               '<span class="subline">'+esc(ticket["service"] or "Service request")+' · '+esc(ticket["machine"] or ticket["location"] or "Details pending")+'</span></span></div>'
+               '<div class="jobright"><span class="pill '+cls+'">'+esc(state_name(status))+'</span>'
+               '</div></div>')
+
+
+def ticket_page(ticket, con, amounts, estimate_running=False):
+    n=int(ticket["id"])
+    a=amounts(ticket)
+    done=bool(ticket["finalized_at"])
+    if done:
+        completed=con.execute("SELECT * FROM job_completions WHERE ticket_id=?", (n,)).fetchone()
+        owner=con.execute("SELECT state FROM owner_reports WHERE ticket_id=?", (n,)).fetchone()
+        native=con.execute("SELECT state FROM erp_jobs WHERE ticket_id=?", (n,)).fetchone()
+        receipts=customer_payments.payments(con,n)
+        paid_state=customer_payments.balance(con,n)
+    else:
+        attached=con.execute("SELECT * FROM ticket_parts WHERE ticket_id=? ORDER BY supplier,sku",(n,)).fetchall()
+        ai_event=con.execute("""SELECT event FROM events WHERE ticket_id=?
+            AND event IN ('internal_ai_estimate','internal_ai_failed') ORDER BY id DESC LIMIT 1""",(n,)).fetchone()
+    status=ticket["status"]
+    info="".join('<div><span>'+label+'</span><b>'+esc(value or "Not supplied")+'</b></div>' for label,value in
+                 (("Phone",ticket["phone"]),("Location",ticket["location"]),("Equipment",ticket["machine"]),("Reported problem",ticket["problem"])))
+    jobinfo='<div class="jobinfo">'+info+'</div>'
+    inner=[]
+    if not done:
+        option=''.join('<option value="'+esc(s)+'"'+(' selected' if status==s else '')+'>'+esc(state_name(s))+'</option>'
+                       for s in ("new","estimating","quoted","approved","in_progress","completed","cancelled"))
+        workform=('<form method="post" action="/ticket/'+str(n)+'/update">'
+                  '<div class="fields">'+
+                  ''.join(field(k,title,ticket[k],"number",step=".01") for k,title in
+                          (("labor_hours","Estimated labor hours"),("labor_rate","Hourly rate ($)"),
+                           ("parts_charge","Parts billed ($)"),("parts_cost","Parts purchase cost ($)"),
+                           ("travel_charge","Travel ($)"),("extra_charge","Other charges ($)")))+
+                  '</div><label>Job status<select name="status">'+option+'</select></label>'
+                  '<label>Shop notes<textarea name="notes">'+esc(ticket["notes"])+'</textarea></label>'+
+                  button("Save estimate")+'</form>')
+        left=('<section class="worksection"><h3>Estimate & job notes</h3>'
+              '<p class="muted">The mechanic reviews this estimate before calling the customer.</p>'
+              '<div class="price"><span>Current estimated job total</span><strong>$'+f'{a["total"]:,.2f}'+'</strong></div>'
+              +workform+'</section>')
+        searchurl=job_reports.google_search_link(ticket["problem"][:90] or ticket["service"][:90],ticket["machine"][:120])
+        right=('<section class="worksection"><h3>Parts & research</h3>'
+               '<div class="links"><a href="'+esc(searchurl)+'" target="_blank" rel="noopener noreferrer">Search job prices on Google ↗</a>'
+               '<a href="https://detroitaxle.com/parts" target="_blank" rel="noopener noreferrer">Detroit Axle ↗</a>'
+               '<a href="https://www.autozonepro.com/" target="_blank" rel="noopener noreferrer">AutoZonePro ↗</a></div>'
+               '<form method="get" action="/" class="inlineform">'+field("googlepart","Search a specific part",placeholder="Starter, brakes, alternator")+
+               '<input type="hidden" name="vehicle" value="'+esc(ticket["machine"])+'">'+button("Search")+'</form>')
+        if attached:
+            right+='<div class="minisection"><h3>Selected parts</h3><ul class="list">'+''.join(
+                '<li>'+esc(p["supplier"])+' · '+esc(p["sku"])+' · '+esc(p["description"])+' — $'+esc(p["unit_cost"])+'</li>'
+                for p in attached)+'</ul></div>'
+        right+=('<details class="inner"><summary>Add a catalogue part</summary><form method="post" action="/ticket/'+str(n)+'/part">'
+                +field("supplier","Supplier",required=True)+field("sku","Part number",required=True)
+                +field("quantity","Quantity",value="1",kind="number",step=".01")
+                +button("Add part")+'</form></details>')
+        if estimate_running:
+            estimate_controls='<p role="status">Estimate running. Reload this job to check the result.</p>'
         else:
-            if completed:
-                inner.append('<section class="worksection"><h3>Completed job</h3>'
-                    '<p><strong>Work performed</strong></p><p>'+esc(completed["work_performed"])+'</p>'
-                    '<div class="jobinfo">'+''.join('<div><span>'+t+'</span><b>'+v+'</b></div>'
-                    for t,v in (("Final invoice","$"+esc(completed["actual_invoice"])),
-                        ("Hours worked",esc(completed["actual_hours"])),
-                        ("Labor cost","$"+esc(completed["actual_labor_cost"])),
-                        ("Parts cost","$"+esc(completed["actual_parts_cost"])),
-                        ("Report email",esc(owner["state"] if owner else "Not queued")),
-                        ("BlueSeer order",esc(state_name(native["state"]) if native else "Not queued"))))+'</div></section>')
-            else:
-                inner.append('<section class="worksection"><h3>Finalized job</h3><p>Invoice: $'+esc(ticket["bill_total"])+'</p></section>')
-            method_labels={"cash":"Cash","check":"Check","card":"Card",
-                           "bank_transfer":"Bank transfer","other":"Other"}
-            payment_html=('<section class="worksection"><h3>Customer invoice</h3>'
-                '<p><a class="action" href="/ticket/'+str(n)+'/invoice.pdf" target="_blank" rel="noopener">View / print PDF invoice</a></p>'
-                '<div class="jobinfo">'
-                '<div><span>Invoice total</span><b>$'+format(paid_state["invoice"],",.2f")+'</b></div>'
-                '<div><span>Payment status</span><b>'+("Paid" if paid_state["due"]==0 else "Unpaid" if paid_state["received"]==0 else "Partly paid")+'</b></div>'
-                '<div><span>Still owed</span><b>$'+format(paid_state["due"],",.2f")+'</b></div></div>')
-            if paid_state["due"]>0:
-                payment_html+=(postform('/ticket/'+str(n)+'/pay-in-full',"Mark Paid","action")
-                    +'<p class="small muted">Records the remaining amount received in cash today.</p>')
-                choices=''.join('<option value="'+esc(k)+'"'+(' selected' if k=="cash" else '')+'>'+v+'</option>' for k,v in method_labels.items())
-                payment_html+=('<details class="inner"><summary>Record partial payment or another payment method</summary>'
-                    '<form method="post" action="/ticket/'+str(n)+'/payment">'
-                    '<div class="fields">'
-                    +field("amount_received","Amount received ($)",format(paid_state["due"],".2f"),"number",required=True,step=".01")
-                    +'<label>Payment method<select name="method">'+choices+'</select></label>'
-                    +field("paid_on","Date paid",date.today().isoformat(),"date")
-                    +field("reference","Check / transaction reference (optional)")
-                    +'</div>'+button("Record payment")+'</form></details>')
-            else:
-                payment_html+='<p class="pill done">Paid in full</p>'
-            if receipts:
-                payment_html+='<details class="inner"><summary>Payment history</summary><ul class="list">'
-                for receipt in receipts:
-                    detail=('$'+esc(receipt["applied"])+' applied · '+esc(method_labels.get(receipt["method"],receipt["method"]))
-                            +' · '+esc(receipt["paid_on"]))
-                    if receipt["method"]=="cash" and Decimal(receipt["change_given"])>0:
-                        detail+=' · $'+esc(receipt["change_given"])+' change returned'
-                    if receipt["reference"]:
-                        detail+=' · '+esc(receipt["reference"])
-                    if receipt["voided_at"]:
-                        detail+=' · VOIDED ('+esc(receipt["void_reason"])+')'
-                    payment_html+='<li>'+detail
-                    if not receipt["voided_at"]:
-                        payment_html+=('<details class="inner"><summary>Correct payment</summary>'
-                           '<form method="post" action="/ticket/'+str(n)+'/void-payment">'
-                           '<input type="hidden" name="payment_id" value="'+str(receipt["id"])+'">'
-                           +field("reason","Reason for voiding",required=True)
-                           +button("Void payment entry","action secondary")+'</form></details>')
-                    payment_html+='</li>'
-                payment_html+='</ul></details>'
-            payment_html+='</section>'
-            inner.append(payment_html)
-        items.append('<details class="ticket" id="ticket-'+str(n)+'">'+jobheader+
-                     '<div class="jobbody">'+jobinfo+''.join(inner)+'</div></details>')
-    if not items:
-        items.append('<div class="empty">No jobs yet. Create a ticket below or connect the business inbox.</div>')
-    newfields=''.join(field(k,t,required=k in ("customer","problem"),placeholder=p) for k,t,p in (
-        ("customer","Customer","Name"),("phone","Phone","Callback number"),
-        ("location","Location","City or township"),("service","Service","Repair, scrap, removal"),
-        ("machine","Vehicle or equipment","Year / make / model"),
-        ("mobility","Where is it?","At shop, mobile, roadside"),
-        ("problem","Customer's request","Brief job description")))
-    catalogue=''.join('<li><b>'+esc(p["supplier"])+' · '+esc(p["sku"])+'</b> — '+esc(p["description"])+' · $'+esc(p["unit_cost"])+'</li>' for p in catalog)
+            estimate_controls=postform('/ticket/'+str(n)+'/suggest',"Generate labor & diagnostic estimate","action secondary")
+            if ai_event and ai_event["event"]=="internal_ai_failed":
+                estimate_controls='<p role="status">The latest estimate failed. Try again.</p>'+estimate_controls
+        right+=('<div class="minisection"><h3>AI assistance</h3>'+estimate_controls+
+                ('<pre class="ai">'+esc(ticket["ai_notes"])+'</pre>' if ticket["ai_notes"] else '')+'</div></section>')
+        inner.append('<div class="working">'+left+right+'</div>')
+        completedform=('<section class="worksection" id="finish-'+str(n)+'"><h3>Finish this job</h3>'
+          '<p class="muted">Enter the completed work and the final price. El Grande will prepare the PDF invoice.</p>'
+          '<form method="post" action="/ticket/'+str(n)+'/complete">'
+          '<label>Work performed<textarea name="work_performed" required placeholder="Repair completed, parts installed, work performed">'+esc(ticket["notes"])+'</textarea></label>'
+          +field("actual_invoice","Final customer bill ($)",format(a["total"],".2f"),"number",required=True,step=".01")
+          +'<details class="inner"><summary>Optional: hours and actual job expenses</summary><div class="fields">'
+          +field("started_at","Started",kind="datetime-local")
+          +field("finished_at","Finished",kind="datetime-local")
+          +field("actual_hours","Hours worked",ticket["labor_hours"],"number",step=".01")
+          +field("actual_labor_cost","Actual labor cost ($)","0","number",step=".01")
+          +field("actual_parts_cost","Actual parts cost ($)",ticket["parts_cost"],"number",step=".01")
+          +field("actual_other_cost","Other expenses ($)","0","number",step=".01")
+          +'</div></details>'
+          +'<div class="footactions">'+button("Finish Job & Create Invoice","action danger")+'</div></form></section>')
+        inner.append(completedform)
+    else:
+        if completed:
+            inner.append('<section class="worksection"><h3>Completed job</h3>'
+                '<p><strong>Work performed</strong></p><p>'+esc(completed["work_performed"])+'</p>'
+                '<div class="jobinfo">'+''.join('<div><span>'+t+'</span><b>'+v+'</b></div>'
+                for t,v in (("Final invoice","$"+esc(completed["actual_invoice"])),
+                    ("Hours worked",esc(completed["actual_hours"])),
+                    ("Labor cost","$"+esc(completed["actual_labor_cost"])),
+                    ("Parts cost","$"+esc(completed["actual_parts_cost"])),
+                    ("Report email",esc(owner["state"] if owner else "Not queued")),
+                    ("BlueSeer order",esc(state_name(native["state"]) if native else "Not queued"))))+'</div></section>')
+        else:
+            inner.append('<section class="worksection"><h3>Finalized job</h3><p>Invoice: $'+esc(ticket["bill_total"])+'</p></section>')
+        method_labels={"cash":"Cash","check":"Check","card":"Card",
+                       "bank_transfer":"Bank transfer","other":"Other"}
+        payment_html=('<section class="worksection"><h3>Customer invoice</h3>'
+            '<p><a class="action" href="/ticket/'+str(n)+'/invoice.pdf" target="_blank" rel="noopener">View / print PDF invoice</a></p>'
+            '<div class="jobinfo">'
+            '<div><span>Invoice total</span><b>$'+format(paid_state["invoice"],",.2f")+'</b></div>'
+            '<div><span>Payment status</span><b>'+("Paid" if paid_state["due"]==0 else "Unpaid" if paid_state["received"]==0 else "Partly paid")+'</b></div>'
+            '<div><span>Still owed</span><b>$'+format(paid_state["due"],",.2f")+'</b></div></div>')
+        if paid_state["due"]>0:
+            payment_html+=(postform('/ticket/'+str(n)+'/pay-in-full',"Mark Paid","action")
+                +'<p class="small muted">Records the remaining amount received in cash today.</p>')
+            choices=''.join('<option value="'+esc(k)+'"'+(' selected' if k=="cash" else '')+'>'+v+'</option>' for k,v in method_labels.items())
+            payment_html+=('<details class="inner"><summary>Record partial payment or another payment method</summary>'
+                '<form method="post" action="/ticket/'+str(n)+'/payment">'
+                '<div class="fields">'
+                +field("amount_received","Amount received ($)",format(paid_state["due"],".2f"),"number",required=True,step=".01")
+                +'<label>Payment method<select name="method">'+choices+'</select></label>'
+                +field("paid_on","Date paid",date.today().isoformat(),"date")
+                +field("reference","Check / transaction reference (optional)")
+                +'</div>'+button("Record payment")+'</form></details>')
+        else:
+            payment_html+='<p class="pill done">Paid in full</p>'
+        if receipts:
+            payment_html+='<details class="inner"><summary>Payment history</summary><ul class="list">'
+            for receipt in receipts:
+                detail=('$'+esc(receipt["applied"])+' applied · '+esc(method_labels.get(receipt["method"],receipt["method"]))
+                        +' · '+esc(receipt["paid_on"]))
+                if receipt["method"]=="cash" and Decimal(receipt["change_given"])>0:
+                    detail+=' · $'+esc(receipt["change_given"])+' change returned'
+                if receipt["reference"]:
+                    detail+=' · '+esc(receipt["reference"])
+                if receipt["voided_at"]:
+                    detail+=' · VOIDED ('+esc(receipt["void_reason"])+')'
+                payment_html+='<li>'+detail
+                if not receipt["voided_at"]:
+                    payment_html+=('<details class="inner"><summary>Correct payment</summary>'
+                       '<form method="post" action="/ticket/'+str(n)+'/void-payment">'
+                       '<input type="hidden" name="payment_id" value="'+str(receipt["id"])+'">'
+                       +field("reason","Reason for voiding",required=True)
+                       +button("Void payment entry","action secondary")+'</form></details>')
+                payment_html+='</li>'
+            payment_html+='</ul></details>'
+        payment_html+='</section>'
+        inner.append(payment_html)
+    return page_shell(
+        '<section class="panel"><div class="panelhead"><h2>Job details</h2>'
+        '<a href="/#jobs" class="action secondary">Back to jobs</a></div>'
+        '<article class="ticket" id="ticket-'+str(n)+'">'+job_heading(ticket)+
+        '<div class="jobbody">'+jobinfo+''.join(inner)+'</div></article></section>'
+    )
+
+
+def page_shell(content):
     html_top='''<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#e09915"><title>El Grande | All by Devoll</title>
 <style>'''+CSS+'''</style></head><body><div class="dashboard-layout">
 <aside class="sidebar">
-<a href="#dashboard" class="sidebar-brand" aria-label="Tomey General Company LLC">
+<a href="/#dashboard" class="sidebar-brand" aria-label="Tomey General Company LLC">
 <img src="/brand/tomey.png" alt="Tomey General Company LLC logo"></a>
 <div class="sidebar-links">
-<a href="#dashboard">⌂ &nbsp;Dashboard</a>
-<a href="#jobs">⚒ &nbsp;Jobs</a>
-<a href="#calendar">▦ &nbsp;Calendar</a>
-<a href="#jobs">♙ &nbsp;Customers</a>
-<a href="#jobs">▤ &nbsp;Invoices</a>
+<a href="/#dashboard">⌂ &nbsp;Dashboard</a>
+<a href="/#jobs">⚒ &nbsp;Jobs</a>
+<a href="/#calendar">▦ &nbsp;Calendar</a>
+<a href="/#jobs">♙ &nbsp;Customers</a>
+<a href="/#jobs">▤ &nbsp;Invoices</a>
 <a href="/bank">$ &nbsp;Money &amp; Banks</a>
 <a href="/bank#cash-count">▣ &nbsp;Safe Count</a>
 <a href="/payments.csv">▥ &nbsp;Reports</a>
@@ -286,10 +280,25 @@ def render(rows,catalog,db,amounts,calendar_month="",edit_appointment=""):
 </div><hr class="dashboard-header-rule">
 <main class="dashboard-main">
 '''
-    content=dashboard_overview.render(rows,db,amounts,calendar_month,edit_appointment)
-    content+='<div class="dashboard-jobdesk">'
-    content+='<div class="cards">'+stats+'</div>'
-    content+='<section class="panel" id="jobs"><div class="panelhead"><h2>Service jobs</h2><span class="muted small">'+str(len(rows))+' shown · Most recent first</span></div>'+''.join(items)+'</section>'
+    return html_top+content+'</main></div></div></body></html>'
+
+
+def render(rows, catalog, con, amounts, calendar_month="", edit_appointment="", job_navigation=""):
+    overview, metrics = dashboard_overview.render(con, amounts, calendar_month, edit_appointment)
+    stats=''.join('<div class="metric"><label>'+name+'</label><strong>'+str(value)+'</strong></div>' for name,value in metrics)
+    items=''.join(
+        f'<article class="ticket" id="ticket-{ticket["id"]}"><a href="/ticket/{ticket["id"]}">'+
+        job_heading(ticket)+'</a></article>' for ticket in rows
+    ) or '<div class="empty">No jobs on this page.</div>'
+    newfields=''.join(field(k,t,required=k in ("customer","problem"),placeholder=p) for k,t,p in (
+        ("customer","Customer","Name"),("phone","Phone","Callback number"),
+        ("location","Location","City or township"),("service","Service","Repair, scrap, removal"),
+        ("machine","Vehicle or equipment","Year / make / model"),
+        ("mobility","Where is it?","At shop, mobile, roadside"),
+        ("problem","Customer's request","Brief job description")))
+    catalogue=''.join('<li><b>'+esc(p["supplier"])+' · '+esc(p["sku"])+'</b> — '+esc(p["description"])+' · $'+esc(p["unit_cost"])+'</li>' for p in catalog)
+    content=overview+'<div class="dashboard-jobdesk"><div class="cards">'+stats+'</div>'
+    content+='<section class="panel" id="jobs"><div class="panelhead"><h2>Service jobs</h2></div>'+items+job_navigation+'</section>'
     content+='<section class="panel" id="new"><div class="panelhead"><h2>New service request</h2><span class="muted small">Phone calls and walk-ins</span></div><form method="post" action="/ticket/new"><div class="fields">'+newfields+'</div><div class="footactions">'+button("Create job")+'</div></form></section>'
     content+='<section class="panel" id="catalogue"><div class="panelhead"><h2>Parts catalogue</h2><span class="muted small">Supplier reference and price lookup</span></div>'
     content+='<div class="links"><a href="https://detroitaxle.com/parts" target="_blank" rel="noopener noreferrer">Detroit Axle catalogue ↗</a><a href="https://www.autozonepro.com/" target="_blank" rel="noopener noreferrer">AutoZonePro ↗</a></div>'
@@ -298,4 +307,4 @@ def render(rows,catalog,db,amounts,calendar_month="",edit_appointment=""):
     content+='<details class="inner"><summary>Import supplier prices (CSV)</summary><form method="post" action="/parts/import"><label>Paste catalogue CSV<textarea name="catalog"></textarea></label>'+button("Import prices")+'</form></details>'
     content+=postform('/parts/fetch',"Refresh connected supplier feeds","action secondary")+'</section>'
 
-    return html_top+content+'</div></main></div></div></body></html>'
+    return page_shell(content+'</div>')

@@ -1,0 +1,16 @@
+[Unit]
+Description=Provision the El Grande BlueSeer connection
+Wants=el-grande-api.service
+After=el-grande-api.service el-grande-desk.service
+StartLimitIntervalSec=120
+StartLimitBurst=4
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/.local/share/el-grande
+ExecStart=/usr/bin/python3 /opt/el-grande/integrations/all_by_devoll/erp_bootstrap.py
+ExecStartPost=/usr/bin/systemctl --user restart el-grande-desk.service
+Restart=on-failure
+RestartSec=3s
+TimeoutStartSec=45s
+UMask=0077

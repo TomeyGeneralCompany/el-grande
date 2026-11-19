@@ -4,8 +4,8 @@ import unittest
 from unittest.mock import patch
 import tempfile
 from pathlib import Path
+from threading import Event
 import desk
-import shop_ui
 
 class ShopUITests(unittest.TestCase):
     def setUp(self):
@@ -19,9 +19,7 @@ class ShopUITests(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
     def page(self):
-        with desk.db() as con:
-            tickets=con.execute("SELECT * FROM tickets ORDER BY id DESC").fetchall()
-        return shop_ui.render(tickets,[],desk.db,desk.amounts)
+        return desk.render_dashboard()
     def test_operator_branding_not_settlement_branding(self):
         page=self.page()
         self.assertIn("All by Devoll, LLC",page)
@@ -31,7 +29,7 @@ class ShopUITests(unittest.TestCase):
         self.assertNotIn("automatic customer quotes",page)
         self.assertNotIn("15% applies",page)
     def test_job_workflow_not_hidden(self):
-        page=self.page()
+        page=desk.render_ticket(self.job)
         for label in ('name="labor_hours"','name="parts_cost"','name="work_performed"',
                       'name="actual_labor_cost"','name="actual_parts_cost"',
                       'name="actual_hours"','name="actual_invoice"',
@@ -43,14 +41,36 @@ class ShopUITests(unittest.TestCase):
         self.assertNotIn("ERP customer code",page)
         self.assertNotIn("BlueSeer accounting",page)
     def test_dashboard_render_skips_erp_probe(self):
-        with desk.db() as con:
-            ticket = con.execute("SELECT * FROM tickets WHERE id=?", (self.job,)).fetchone()
         erp = {"running": True, "configured": True}
         with patch.object(desk, "erp_status", return_value=erp) as probe:
-            self.assertIn("Job calendar", desk.render([ticket]))
+            self.assertIn("Job calendar", desk.render_dashboard())
             probe.assert_not_called()
             self.assertEqual(desk.system_status()["erp"], erp)
             probe.assert_called_once()
+
+    def test_optional_estimate_runs_in_background_one_at_a_time(self):
+        started, release, finished = Event(), Event(), Event()
+        def fake_suggest(ticket_id):
+            self.assertEqual(ticket_id, self.job)
+            started.set()
+            release.wait(timeout=3)
+        def worker(ticket_id):
+            try:
+                actual_worker(ticket_id)
+            finally:
+                finished.set()
+        actual_worker = desk.run_estimate
+        with patch.object(desk, "suggest", side_effect=fake_suggest), patch.object(desk, "run_estimate", side_effect=worker):
+            try:
+                desk.start_estimate(self.job)
+                self.assertTrue(started.wait(timeout=3))
+                self.assertIn("Estimate running", desk.render_ticket(self.job))
+                with self.assertRaisesRegex(ValueError, "already running"):
+                    desk.start_estimate(self.job)
+            finally:
+                release.set()
+                self.assertTrue(finished.wait(timeout=3))
+        self.assertIn("Generate labor &amp; diagnostic estimate", desk.render_ticket(self.job))
 
     def test_customer_data_is_escaped(self):
         _,_=desk.create_ticket({"customer":"<script>alert(1)</script>"},
@@ -81,7 +101,7 @@ class ShopUITests(unittest.TestCase):
             "actual_hours":"2","actual_labor_cost":"20",
             "actual_parts_cost":"50","actual_other_cost":"0",
             "actual_invoice":"350","started_at":"","finished_at":""})
-        page=self.page()
+        page=desk.render_ticket(self.job)
         self.assertIn("Completed job",page)
         self.assertIn("350.00",page)
         self.assertNotIn('name="actual_invoice"',page)

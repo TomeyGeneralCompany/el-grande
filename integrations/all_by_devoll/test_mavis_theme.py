@@ -13,7 +13,6 @@ import bank_ui
 import desk
 import mavis_theme
 import office_settings
-import shop_ui
 
 class MavisThemeTests(unittest.TestCase):
     def setUp(self):
@@ -37,9 +36,7 @@ class MavisThemeTests(unittest.TestCase):
         self.assertIn("color:#fff",mavis_theme.CSS)
 
     def test_job_desk_uses_same_mavis_style(self):
-        with desk.db() as con:
-            jobs=con.execute("SELECT * FROM tickets").fetchall()
-        output=shop_ui.render(jobs,[],desk.db,desk.amounts)
+        output=desk.render_dashboard()
         self.assertIn("All by Devoll, LLC",output)
         self.assertIn('href="/bank"',output)
         self.assertIn("--panel-teal: #00c4bf",output)

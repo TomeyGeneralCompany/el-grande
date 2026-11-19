@@ -18,7 +18,15 @@ cp -a packaging/el-grande-launcher.py "$PKG/opt/el-grande/packaging/"
 cp -a packaging/el-grande.desktop "$PKG/usr/share/applications/"
 cp -a packaging/el-grande-*.service "$PKG/usr/lib/systemd/user/"
 mkdir -p "$PKG/opt/el-grande/java/classes" "$PKG/opt/el-grande/java/lib"
-cp -a lib/*.jar "$PKG/opt/el-grande/java/lib/"
+# These are kept on the full Java build classpath. The shop installer
+# transaction smoke passes without them in the installed runtime.
+for jar in lib/*.jar; do
+    case "${jar##*/}" in
+        aspose-cells-7.0.0.jar|jxbrowser-3.0.jar|junit-4.11.jar|hamcrest-core-1.3.jar|oshi-core-3.4.0.jar|jfreechart-1.0.16-experimental.jar|jfreechart-1.0.16-swt.jar|swtgraphics2d.jar)
+            continue ;;
+    esac
+    cp -a "$jar" "$PKG/opt/el-grande/java/lib/"
+done
 cp -a build/java-classes/. "$PKG/opt/el-grande/java/classes/"
 install -D -m 0644 sf/data/en/bsdb.db "$PKG/opt/el-grande/java/data-template/en/bsdb.db"
 cat >"$PKG/DEBIAN/control" <<EOF

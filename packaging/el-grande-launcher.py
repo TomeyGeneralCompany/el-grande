@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Graphical first-run configuration and launcher. No terminal required."""
 import os
+import base64
 from pathlib import Path
 import secrets
 import subprocess
@@ -84,55 +85,42 @@ def ensure_first_run_defaults():
         "ABD_DASHBOARD_PASSWORD":""
     })
 
-def try_dashboard():
+def try_dashboard(settings):
+    request = urllib.request.Request(URL + "ready")
+    password = settings.get("ABD_DASHBOARD_PASSWORD")
+    if password:
+        token = base64.b64encode(("operator:" + password).encode("utf-8")).decode("ascii")
+        request.add_header("Authorization", "Basic " + token)
     try:
-        with urllib.request.urlopen("http://127.0.0.1:8765/",timeout=2) as r:
-            return r.status in (200,401)
-    except Exception:
-        # urllib raises HTTPError for BasicAuth challenge; that means service exists.
-        try:
-            import urllib.error
-            with urllib.request.urlopen(URL,timeout=2):pass
-        except urllib.error.HTTPError as e:
-            return e.code==401
-        except Exception:pass
+        with urllib.request.urlopen(request, timeout=2) as response:
+            return response.status == 200 and response.read(16) == b"ready"
+    except (OSError, ValueError):
         return False
 
+
 def open_dashboard():
-    # The installed El Grande app owns both the job desk and ERP runtime.
-    # The mechanic never needs to launch BlueSeer as a separate program.
     try:
         prepare_local_data()
     except OSError as err:
-        messagebox.showerror("El Grande storage",str(err))
+        messagebox.showerror("El Grande storage", str(err))
         return
-    service("daemon-reload")
-    api=service("enable","--now","el-grande-api.service")
-    if api.returncode:
-        messagebox.showwarning("Accounting","BlueSeer could not start automatically. "
-                               "The shop dashboard will still open.")
-    # Authenticate to our already-bundled BlueSeer engine and register the
-    # actual shop service items. Do not require operator terminal instructions.
-    bootstrap=APP / "integrations" / "all_by_devoll" / "erp_bootstrap.py"
-    if bootstrap.exists():
-        try:
-            prepared=subprocess.run(
-                ["/usr/bin/python3",str(bootstrap)],capture_output=True,
-                text=True,timeout=35)
-            if prepared.returncode==0:
-                # Job Desk can pick up confirmed native API credentials only
-                # after a service restart; no tickets are deleted.
-                service("restart","el-grande-desk.service")
-        except (OSError,subprocess.TimeoutExpired):
-            pass
-    if try_dashboard():
-        webbrowser.open(URL)
-        return
-    res=service("enable","--now","el-grande-desk.service")
-    if res.returncode:
-        messagebox.showerror("El Grande startup",res.stderr.strip() or "Could not start the service.")
-        return
+    settings = read_env()
+    if not try_dashboard(settings):
+        service("daemon-reload")
+        desk = service("enable", "el-grande-desk.service")
+        if not desk.returncode:
+            # Also replaces any still-running pre-upgrade desk with no readiness route.
+            desk = service("restart", "el-grande-desk.service")
+        if desk.returncode:
+            messagebox.showerror("El Grande startup", desk.stderr.strip() or "Could not start the service.")
+            return
     webbrowser.open(URL)
+
+    # Native posting can provision and load its credentials after the UI opens.
+    service("enable", "--now", "--no-block", "el-grande-api.service")
+    if settings.get("ABD_BLUESEER_CONNECTED") != "yes":
+        service("start", "--no-block", "el-grande-erp-setup.service")
+
 
 def configure():
     env=read_env()
