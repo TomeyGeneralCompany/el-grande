@@ -132,7 +132,6 @@ footer {border-top:1px solid #fff;color:#fff}
   .metric,.panel,section:not(.worksection) {padding:15px}
   .cards {grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 }
-"""
 
 /* All by Devoll gold-and-teal design, with a red parent-company logo corner.
    Matches the supplied reference without adding textures or gradients. */
@@ -223,3 +222,4 @@ gap:6px 18px;font-weight:600}
  .dashboard-overview {grid-template-columns:1fr}
  .dashboard-overview .overview-wide {grid-column:auto}
 }
+"""
