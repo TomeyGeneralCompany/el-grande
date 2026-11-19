@@ -131,6 +131,7 @@ def render(rows,catalog,db,amounts,system=None):
             sync=con.execute("SELECT kind,state,record_number FROM blue_sync WHERE ticket_id=?",(n,)).fetchall()
             completed=con.execute("SELECT * FROM job_completions WHERE ticket_id=?",(n,)).fetchone()
             owner=con.execute("SELECT state FROM owner_reports WHERE ticket_id=?",(n,)).fetchone()
+            native=con.execute("SELECT state,last_error FROM erp_jobs WHERE ticket_id=?",(n,)).fetchone()
         status=ticket["status"]
         cls="done" if done else "alert" if status=="new" else ""
         jobheader=('<summary><div class="jobleft"><span class="jobid">ABD-'+f"{n:06d}"+'</span>'
@@ -211,7 +212,8 @@ def render(rows,catalog,db,amounts,system=None):
                         ("Hours worked",esc(completed["actual_hours"])),
                         ("Labor cost","$"+esc(completed["actual_labor_cost"])),
                         ("Parts cost","$"+esc(completed["actual_parts_cost"])),
-                        ("Report email",esc(owner["state"] if owner else "Not queued"))))+'</div></section>')
+                        ("Report email",esc(owner["state"] if owner else "Not queued")),
+                        ("BlueSeer order",esc(state_name(native["state"]) if native else "Not queued"))))+'</div></section>')
             else:
                 inner.append('<section class="worksection"><h3>Finalized job</h3><p>Invoice: $'+esc(ticket["bill_total"])+'</p></section>')
             actions=(postform('/ticket/'+str(n)+'/paid',"Mark paid","action secondary") if status!="paid" else '<span class="pill done">Paid</span>')
