@@ -141,6 +141,7 @@ def page(settings,status):
         "bank-saved":"Bank information saved.",
         "bank-failed":"Bank information could not be saved. Check the accounting bank code.",
         "plaid-saved":"Bank connection provider is configured.",
+        "plaid-failed":"Bank connection needs valid provider credentials. You can still use the money ledger.",
     }.get(status,"")
     connected=(settings.get("ABD_BLUESEER_CONNECTED")=="yes" and local_erp_running())
     erp_caption=("BlueSeer connected" if connected else
