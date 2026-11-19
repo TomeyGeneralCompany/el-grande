@@ -138,6 +138,22 @@ def sales_lines(ticket,math):
     if not rows:raise BridgeError("Nothing billable in draft; enter estimate first")
     return rows
 
+def finalized_sales_lines(ticket,math):
+    """The signed-off customer bill is the authoritative revenue amount.
+
+    The completion form records actual labor/parts *costs*, not customer sale
+    prices. A single native service line posts the full agreed customer price;
+    the operator's costs and the owner's off-the-top split remain separate.
+    """
+    if not ticket["finalized_at"]:
+        raise BridgeError("Job is not completed")
+    total=Decimal(str(math["basis"]))
+    if not total.is_finite() or total<=0:
+        raise BridgeError("Completed customer bill must be greater than zero")
+    return [line(os.environ["ABD_BLUESEER_LABOR_ITEM"],
+                 ("All by Devoll completed service: "+str(ticket["problem"]))[:240],
+                 total,1)]
+
 def build_payloads(ticket,math):
     """Build native Java-record-compatible JSON for the 8.0 endpoints."""
     key,today,cust,site=header_data(ticket,math)
@@ -145,7 +161,8 @@ def build_payloads(ticket,math):
              f"{ticket['machine']}. {ticket['problem']}")[:255]
     currency=os.getenv("ABD_BLUESEER_CURRENCY","USD")
     service_type=os.getenv("ABD_BLUESEER_SERVICE_TYPE","order")
-    lines=sales_lines(ticket,math)
+    lines=(finalized_sales_lines(ticket,math)
+           if ticket["finalized_at"] else sales_lines(ticket,math))
     sv=record(SV_FIELDS,sv_nbr=key,sv_cust=cust,sv_ship=cust,
               sv_create_date=today,sv_due_date=today,sv_rmks=remarks,
               sv_status="open",sv_userid=os.environ["ABD_BLUESEER_USER"],
@@ -208,14 +225,15 @@ def submit_internal_quote(ticket,math,client=None):
 def submit_service_order(ticket,math,client=None):
     require_config()
     payload=build_payloads(ticket,math)
-    if payload["line_total"].quantize(Decimal(".01"))!=math["total"]:
-        raise BridgeError("Native service-order lines do not reconcile to quote")
+    expected=math["basis"] if ticket["finalized_at"] else math["total"]
+    if payload["line_total"].quantize(Decimal(".01"))!=expected:
+        raise BridgeError("Native service-order lines do not reconcile to the customer bill")
     client=client or BlueSeerClient()
     existing=client.get("dataServORD","getServiceOrderMstr",payload["key"])
     if isinstance(existing,dict) and existing.get("sv_nbr")==payload["key"]:
         if existing.get("sv_cust")!=header_data(ticket,math)[2]:
             raise BridgeError("Existing BlueSeer service order belongs to another customer")
-        verify_existing_lines(client,"service_order",payload["key"],math["total"],existing["sv_cust"])
+        verify_existing_lines(client,"service_order",payload["key"],expected,existing["sv_cust"])
         return payload["key"],"exists"
     client.post("dataServORD","addServiceOrderTransaction",payload["service_order"])
     return payload["key"],"created"
