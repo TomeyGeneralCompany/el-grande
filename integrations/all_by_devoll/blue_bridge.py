@@ -18,9 +18,6 @@ REQUIRED = ("ABD_BLUESEER_URL","ABD_BLUESEER_USER","ABD_BLUESEER_PASSWORD",
             "ABD_BLUESEER_LABOR_ITEM","ABD_BLUESEER_PARTS_ITEM")
 class BridgeError(Exception):pass
 
-def enabled():
-    return bool(os.getenv("ABD_BLUESEER_URL"))
-
 def require_config():
     missing=[k for k in REQUIRED if not os.getenv(k,"").strip()]
     if missing:raise BridgeError("Missing BlueSeer configuration: "+", ".join(missing))

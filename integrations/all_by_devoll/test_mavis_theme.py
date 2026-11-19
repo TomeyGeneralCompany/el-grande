@@ -39,9 +39,7 @@ class MavisThemeTests(unittest.TestCase):
     def test_job_desk_uses_same_mavis_style(self):
         with desk.db() as con:
             jobs=con.execute("SELECT * FROM tickets").fetchall()
-        output=shop_ui.render(jobs,[],desk.db,desk.amounts,{
-            "mailbox":False,"report":False,
-            "erp":{"running":False,"configured":False}})
+        output=shop_ui.render(jobs,[],desk.db,desk.amounts)
         self.assertIn("All by Devoll, LLC",output)
         self.assertIn('href="/bank"',output)
         self.assertIn("--panel-teal: #00c4bf",output)

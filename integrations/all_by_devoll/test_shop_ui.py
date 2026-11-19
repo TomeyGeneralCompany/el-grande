@@ -18,12 +18,10 @@ class ShopUITests(unittest.TestCase):
             "problem":"Pads are squealing and warning light is on"},"manual:shop-ui-test")
     def tearDown(self):
         self.tmp.cleanup()
-    def page(self,status=None):
+    def page(self):
         with desk.db() as con:
             tickets=con.execute("SELECT * FROM tickets ORDER BY id DESC").fetchall()
-        return shop_ui.render(tickets,[],desk.db,desk.amounts,status or {
-            "mailbox":False,"report":False,
-            "erp":{"running":False,"configured":False}})
+        return shop_ui.render(tickets,[],desk.db,desk.amounts)
     def test_operator_branding_not_settlement_branding(self):
         page=self.page()
         self.assertIn("All by Devoll, LLC",page)
@@ -44,6 +42,16 @@ class ShopUITests(unittest.TestCase):
         self.assertIn("AutoZonePro",page)
         self.assertNotIn("ERP customer code",page)
         self.assertNotIn("BlueSeer accounting",page)
+    def test_dashboard_render_skips_erp_probe(self):
+        with desk.db() as con:
+            ticket = con.execute("SELECT * FROM tickets WHERE id=?", (self.job,)).fetchone()
+        erp = {"running": True, "configured": True}
+        with patch.object(desk, "erp_status", return_value=erp) as probe:
+            self.assertIn("Job calendar", desk.render([ticket]))
+            probe.assert_not_called()
+            self.assertEqual(desk.system_status()["erp"], erp)
+            probe.assert_called_once()
+
     def test_customer_data_is_escaped(self):
         _,_=desk.create_ticket({"customer":"<script>alert(1)</script>"},
             "manual:escape-ui-test")
