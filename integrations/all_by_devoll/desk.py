@@ -665,7 +665,9 @@ class Handler(BaseHTTPRequestHandler):
                 page=bank_ui.page(con,bank_connect.ready()[0],parse_qs(urlsplit(self.path).query).get("status",[""])[0])
             return self.response_text(page)
         if path=="/bank/connect":
-            token=bank_connect.link_token()
+            try:token=bank_connect.link_token()
+            except (ValueError,LookupError,KeyError):
+                return self.redirect("/settings?status=plaid-failed")
             nonce=secrets.token_urlsafe(24)
             page=bank_connect.connection_page(token,nonce)
             csp=("default-src 'none'; style-src 'unsafe-inline'; "
