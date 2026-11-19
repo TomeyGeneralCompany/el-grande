@@ -1,7 +1,7 @@
 """Cash-first, append-only manual customer payment ledger for All by Devoll.
 
-The final invoice is authoritative. Recording cash is an operator attestation,
-not evidence of bank deposit or BlueSeer AR cash receipt.
+The final invoice is authoritative. Entries are queued automatically for native
+BlueSeer AR/GL settlement. The mechanic records each payment once.
 Corrections are void entries, never deletion or rewriting.
 """
 from datetime import date,datetime,timezone
