@@ -89,7 +89,7 @@ def entry(con,account_id,date_text,amount_cents,category,memo="",reference="",
         raise ValueError("Invalid category")
     if len(str(memo))>300 or len(str(reference))>100:
         raise ValueError("Description is too long")
-    return con.execute("""INSERT OR IGNORE INTO money_entries
+    return con.execute("""INSERT INTO money_entries
       (account_id,entry_date,amount_cents,category,memo,reference,source,source_key,created_at,reversal_of)
       VALUES (?,?,?,?,?,?,?,?,?,?)""",
       (account_id,valid_date(date_text),amount_cents,category,
