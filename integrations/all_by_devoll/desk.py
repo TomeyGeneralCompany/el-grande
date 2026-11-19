@@ -33,6 +33,7 @@ import shop_ui
 import office_settings
 import erp_jobs
 import customer_payments
+import invoice_pdf
 import urllib.error
 import customer_bridge
 from urllib.parse import parse_qs, urlsplit
@@ -340,6 +341,9 @@ def finish_job(ticket_id,data):
         # same transaction. A rejected payment never finalizes the job.
         if str(data.get("amount_received","")).strip():
             customer_payments.record(con,ticket_id,data)
+        finished=con.execute("SELECT * FROM tickets WHERE id=?",(ticket_id,)).fetchone()
+        completion=con.execute("SELECT * FROM job_completions WHERE ticket_id=?",(ticket_id,)).fetchone()
+        invoice_pdf.create(finished,completion)
 
 def erp_poller():
     while True:
@@ -360,6 +364,14 @@ def report_poller():
 def record_customer_payment(ticket_id,data):
     with db() as con:
         return customer_payments.record(con,ticket_id,data)
+
+def pay_invoice_in_full(ticket_id):
+    """One-click cash payment for the actual remaining invoice balance."""
+    with db() as con:
+        b=customer_payments.balance(con,ticket_id)
+        if b["due"]<=0:raise ValueError("This invoice is already paid")
+        return customer_payments.record(con,ticket_id,{"method":"cash",
+            "amount_received":str(b["due"])})
 
 def void_customer_payment(ticket_id,data):
     with db() as con:
@@ -619,6 +631,19 @@ class Handler(BaseHTTPRequestHandler):
                                   parse_qs(urlsplit(self.path).query).get("status",[""])[0]))
         if path=="/health":
             return self.response_text(json.dumps({"ok":True,"database":str(DB),"connections":system_status()}),typ="application/json")
+        match=re.fullmatch(r"/ticket/(\d+)/invoice\.pdf",path)
+        if match:
+            ticket_id=int(match.group(1))
+            with db() as con:
+                ticket=con.execute("SELECT * FROM tickets WHERE id=?",(ticket_id,)).fetchone()
+                if ticket is None:return self.response_text("Invoice not found",404,"text/plain")
+                if not ticket["finalized_at"]:return self.response_text("Job is not complete",409,"text/plain")
+                completed=con.execute("SELECT * FROM job_completions WHERE ticket_id=?",(ticket_id,)).fetchone()
+            path_pdf=invoice_pdf.create(ticket,completed)
+            document=path_pdf.read_bytes()
+            self.response_headers(200,"application/pdf")
+            self.wfile.write(document)
+            return
         if path=="/payments.csv":
             with db() as con:
                 rows=con.execute("""SELECT p.*,t.customer,t.bill_total
@@ -684,7 +709,7 @@ class Handler(BaseHTTPRequestHandler):
                 ident="manual:"+secrets.token_hex(16)
                 ident_id,_=create_ticket(data,ident)
             else:
-                found=re.fullmatch(r"/ticket/(\d+)/(update|finalize|complete|suggest|payment|void-payment|part|blue-customer|blue-quote|blue-order|blue-invoice)",path)
+                found=re.fullmatch(r"/ticket/(\d+)/(update|finalize|complete|suggest|payment|pay-in-full|void-payment|part|blue-customer|blue-quote|blue-order|blue-invoice)",path)
                 if not found:return self.response_text("Not found",404,"text/plain")
                 ident_id=int(found.group(1))
                 action=found.group(2)
@@ -693,6 +718,7 @@ class Handler(BaseHTTPRequestHandler):
                 if action=="complete":finish_job(ident_id,data)
                 if action=="suggest":suggest(ident_id)
                 if action=="payment":record_customer_payment(ident_id,data)
+                if action=="pay-in-full":pay_invoice_in_full(ident_id)
                 if action=="void-payment":void_customer_payment(ident_id,data)
                 if action=="part":save_part(ident_id,data.get("supplier",""),data.get("sku",""),data.get("quantity","1"))
                 if action=="blue-customer":blue_customer(ident_id)
