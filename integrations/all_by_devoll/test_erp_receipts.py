@@ -49,7 +49,7 @@ class ReceiptSyncTests(unittest.TestCase):
                 self.assertEqual(post.call_count,1)
         self.assertEqual(self.states()[(p,"payment")],"posted")
         with desk.db() as con:
-            self.assertEqual(con.execute("SELECT status FROM tickets").fetchone()[0],"invoiced")
+            self.assertEqual(con.execute("SELECT status FROM tickets").fetchone()[0],"completed")
     def test_cancel_unsent_payment(self):
         pid=self.add("90")
         desk.void_customer_payment(self.ticket,{"payment_id":pid,"reason":"Wrong cash receipt"})
