@@ -334,8 +334,7 @@ def finish_job(ticket_id,data):
         con.execute("INSERT INTO events(ticket_id,timestamp,event,detail) VALUES(?,?,?,?)",
                     (ticket_id,now,"bill_finalized",str(final)))
         job_reports.queue_report(con,ticket_id)
-        if erp_jobs.eligible():
-            erp_jobs.enqueue(con,ticket_id)
+        erp_jobs.enqueue(con,ticket_id)
 
 def erp_poller():
     while True:
@@ -523,8 +522,6 @@ def invoice_native(ticket_id):
         if row is None:raise LookupError("Ticket not found")
         a=amounts(row)
         if not a["finalized"]:raise ValueError("Finalize the actual bill before native invoicing")
-        if a["basis"]!=a["total"]:
-            raise ValueError("Final bill differs from the estimate; reconcile and finalize a matching bill before creating a native invoice")
         if not row["blue_customer"] or not row["blue_ship_to"]:
             raise ValueError("Set the specific BlueSeer customer and ship-to codes on this ticket before finalization")
         synced=con.execute("SELECT state FROM blue_sync WHERE ticket_id=? AND kind='service_order'",(ticket_id,)).fetchone()
