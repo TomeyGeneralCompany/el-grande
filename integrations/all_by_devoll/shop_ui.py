@@ -233,25 +233,28 @@ def render(rows,catalog,db,amounts,system=None):
                 inner.append('<section class="worksection"><h3>Finalized job</h3><p>Invoice: $'+esc(ticket["bill_total"])+'</p></section>')
             method_labels={"cash":"Cash","check":"Check","card":"Card",
                            "bank_transfer":"Bank transfer","other":"Other"}
-            payment_html=('<section class="worksection"><h3>Customer payments</h3>'
-                          '<div class="jobinfo">'
-                          '<div><span>Final bill (tax included)</span><b>$'+format(paid_state["invoice"],",.2f")+'</b></div>'
-                          '<div><span>Received</span><b>$'+format(paid_state["received"],",.2f")+'</b></div>'
-                          '<div><span>Still owed</span><b>$'+format(paid_state["due"],",.2f")+'</b></div></div>')
+            payment_html=('<section class="worksection"><h3>Customer invoice</h3>'
+                '<p><a class="action" href="/ticket/'+str(n)+'/invoice.pdf" target="_blank" rel="noopener">View / print PDF invoice</a></p>'
+                '<div class="jobinfo">'
+                '<div><span>Invoice total</span><b>$'+format(paid_state["invoice"],",.2f")+'</b></div>'
+                '<div><span>Payment status</span><b>'+("Paid" if paid_state["due"]==0 else "Unpaid" if paid_state["received"]==0 else "Partly paid")+'</b></div>'
+                '<div><span>Still owed</span><b>$'+format(paid_state["due"],",.2f")+'</b></div></div>')
             if paid_state["due"]>0:
+                payment_html+=(postform('/ticket/'+str(n)+'/pay-in-full',"Mark invoice paid (cash)","action")
+                    +'<p class="small muted">Press this after the customer hands over the full amount owed.</p>')
                 choices=''.join('<option value="'+esc(k)+'"'+(' selected' if k=="cash" else '')+'>'+v+'</option>' for k,v in method_labels.items())
-                payment_html+=('<form method="post" action="/ticket/'+str(n)+'/payment">'
+                payment_html+=('<details class="inner"><summary>Record partial payment or another payment method</summary>'
+                    '<form method="post" action="/ticket/'+str(n)+'/payment">'
                     '<div class="fields">'
-                    +field("amount_received","Amount customer handed over ($)",format(paid_state["due"],".2f"),"number",required=True,step=".01")
+                    +field("amount_received","Amount received ($)",format(paid_state["due"],".2f"),"number",required=True,step=".01")
                     +'<label>Payment method<select name="method">'+choices+'</select></label>'
                     +field("paid_on","Date paid",date.today().isoformat(),"date")
                     +field("reference","Check / transaction reference (optional)")
-                    +'</div>'+button("Record payment")+'</form>'
-                    '<p class="small muted">With cash, enter the amount handed over. Excess is recorded as change returned.</p>')
+                    +'</div>'+button("Record payment")+'</form></details>')
             else:
                 payment_html+='<p class="pill done">Paid in full</p>'
             if receipts:
-                payment_html+='<h3>Payment history</h3><ul class="list">'
+                payment_html+='<details class="inner"><summary>Payment history</summary><ul class="list">'
                 for receipt in receipts:
                     detail=('$'+esc(receipt["applied"])+' applied · '+esc(method_labels.get(receipt["method"],receipt["method"]))
                             +' · '+esc(receipt["paid_on"]))
@@ -269,7 +272,7 @@ def render(rows,catalog,db,amounts,system=None):
                            +field("reason","Reason for voiding",required=True)
                            +button("Void payment entry","action secondary")+'</form></details>')
                     payment_html+='</li>'
-                payment_html+='</ul>'
+                payment_html+='</ul></details>'
             payment_html+='</section>'
             inner.append(payment_html)
         items.append('<details class="ticket" id="ticket-'+str(n)+'">'+jobheader+
