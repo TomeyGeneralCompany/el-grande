@@ -52,6 +52,51 @@ CREATE TABLE IF NOT EXISTS bank_feed(
  UNIQUE(provider,external_id)
 );
 """
+# An immutable snapshot of the physical count and the recorded cashbook balance.
+# Counting cash never changes the register, customer payments or native BlueSeer.
+CASH_COUNT_DDL="""
+CREATE TABLE IF NOT EXISTS cash_counts (
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ account_id INTEGER NOT NULL REFERENCES money_accounts(id),
+ count_date TEXT NOT NULL,
+ counted_cents INTEGER NOT NULL CHECK(counted_cents >= 0),
+ expected_cents INTEGER NOT NULL,
+ variance_cents INTEGER NOT NULL,
+ notes TEXT NOT NULL DEFAULT '',
+ recorded_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS cash_counts_recent ON cash_counts(account_id,id DESC);
+"""
+def cash_accounts(con):
+    return con.execute("""SELECT a.*,
+       a.opening_cents+COALESCE((SELECT SUM(amount_cents) FROM money_entries
+           WHERE account_id=a.id),0) AS balance_cents
+       FROM money_accounts a WHERE a.kind='cash' AND a.active=1
+       ORDER BY a.id""").fetchall()
+def record_cash_count(con,payload):
+    account_id=int(payload.get("account_id",0))
+    account=con.execute("""SELECT a.id,a.opening_cents+COALESCE(
+      (SELECT SUM(e.amount_cents) FROM money_entries e WHERE e.account_id=a.id),0
+      ) AS balance_cents FROM money_accounts a
+      WHERE a.id=? AND a.kind='cash' AND a.active=1""",(account_id,)).fetchone()
+    if account is None:raise ValueError("Select a cash account")
+    counted=cents(payload.get("counted_amount",""))
+    if counted<0:raise ValueError("Cash count cannot be negative")
+    counted_date=valid_date(payload.get("count_date"))
+    notes=str(payload.get("notes","")).strip()
+    if len(notes)>300:raise ValueError("Cash count notes are too long")
+    expected=int(account["balance_cents"])
+    variance=counted-expected
+    cursor=con.execute("""INSERT INTO cash_counts
+       (account_id,count_date,counted_cents,expected_cents,variance_cents,notes,recorded_at)
+       VALUES (?,?,?,?,?,?,?)""",
+       (account_id,counted_date,counted,expected,variance,notes,utc()))
+    return cursor.lastrowid,variance
+def recent_cash_counts(con,limit=30):
+    return con.execute("""SELECT c.*,a.name AS account_name FROM cash_counts c
+      JOIN money_accounts a ON a.id=c.account_id
+      ORDER BY c.id DESC LIMIT ?""",(limit,)).fetchall()
+
 def utc():return datetime.now(timezone.utc).isoformat(timespec="seconds")
 def cents(value,positive=False):
     try:d=Decimal(str(value).strip())
@@ -68,7 +113,7 @@ def valid_date(raw):
     if d>date.today():raise ValueError("Transaction date cannot be in the future")
     return d.isoformat()
 def init(con):
-    con.executescript(DDL)
+    con.executescript(DDL + CASH_COUNT_DDL)
     con.execute("INSERT OR IGNORE INTO money_accounts(name,kind) VALUES('Cash','cash')")
     con.execute("INSERT OR IGNORE INTO money_accounts(name,kind) VALUES('Business bank','bank')")
     # Existing customer receipts from older El Grande versions are brought in
