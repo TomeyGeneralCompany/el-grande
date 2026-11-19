@@ -204,11 +204,11 @@ border-radius:9px;color:white;font-weight:700;list-style:none;display:inline-blo
 <details class="details"><summary>"""+("Edit connection" if provider_configured else "Set up bank connection")+"""</summary>
 <form method="post" action="/bank/provider-settings">
 <label>Plaid client ID<input name="client_id" type="text" autocomplete="off" placeholder="Provided by Plaid" maxlength="128"></label>
-<label>Plaid secret<input name="secret" type="password" autocomplete="new-password" maxlength="256" placeholder=""""+("Saved — leave blank to keep" if provider_configured else "Plaid secret")+""""></label>
+<label>Plaid secret<input name="secret" type="password" autocomplete="new-password" maxlength="256" placeholder="Enter secret, or leave blank to keep it"></label>
 <label>Connection environment<select name="environment">
-<option value="sandbox""""+(' selected' if provider_environment=="sandbox" else "")+""">Sandbox (testing)</option>
-<option value="development""""+(' selected' if provider_environment=="development" else "")+""">Development</option>
-<option value="production""""+(' selected' if provider_environment=="production" else "")+""">Production (real banks)</option>
+<option value="sandbox">Sandbox (testing)</option>
+<option value="development">Development</option>
+<option value="production">Production (real banks)</option>
 </select></label><p class="hint">This connector needs a Plaid developer account. The bank password is entered only in the bank's authorization flow, never here.</p>
 <button type="submit">Save provider connection</button></form></details>
 <p><a href="/bank">Open money ledger and bank connections</a></p>
