@@ -19,9 +19,10 @@ CREATE TABLE IF NOT EXISTS money_accounts(
  provider_item_id TEXT NOT NULL DEFAULT '',
  official_balance_cents INTEGER,
  official_balance_at TEXT NOT NULL DEFAULT '',
- active INTEGER NOT NULL DEFAULT 1,
- UNIQUE(provider,provider_account_id)
+ active INTEGER NOT NULL DEFAULT 1
 );
+CREATE UNIQUE INDEX IF NOT EXISTS money_accounts_provider_id ON money_accounts(provider,provider_account_id)
+ WHERE provider<>'' AND provider_account_id<>'';
 CREATE TABLE IF NOT EXISTS money_entries(
  id INTEGER PRIMARY KEY AUTOINCREMENT,
  account_id INTEGER NOT NULL REFERENCES money_accounts(id),
