@@ -8,8 +8,8 @@ def e(x):return html.escape(str(x if x is not None else ""),quote=True)
 def page(con,provider_ready=False,status=""):
     rows=bank_ledger.accounts(con)
     entries=bank_ledger.recent_entries(con)
-    cash_accounts=bank_ledger.cash_accounts(con)
-    cash_counts=bank_ledger.recent_cash_counts(con)
+    cash_rows=bank_ledger.cash_accounts(con)
+    count_rows=bank_ledger.recent_cash_counts(con)
     feed=con.execute("""SELECT f.*,a.name account_name
           FROM bank_feed f JOIN money_accounts a ON a.id=f.account_id
           ORDER BY f.entry_date DESC,f.id DESC LIMIT 50""").fetchall()
@@ -66,25 +66,21 @@ table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:9px;bord
       +'<label>Date<input name="entry_date" type="date" value="'+date.today().isoformat()+'" required></label>'
       +'<label>Note<input name="memo" maxlength="300"></label>'
       +'<button type="submit">Record transfer</button></form></div></section>')
-    cash_choices="".join('<option value="'+str(a["id"])+'">'+e(a["name"])+'</option>' for a in cash_accounts)
-    content.append('<section><h2>Count cash in the safe</h2>'
-      '<p class="muted">Enter the cash physically counted. Compare it with the register balance and save a dated record. Saving a count does not change the recorded balance.</p>')
-    if cash_accounts:
-        content.append('<form method="post" action="/bank/cash-count">'
-          '<label>Cash account<select name="account_id">'+cash_choices+'</select></label>'
-          '<label>Cash physically counted ($)<input name="counted_amount" type="number" min="0" step=".01" required></label>'
-          '<label>Date<input name="count_date" type="date" value="'+date.today().isoformat()+'" required></label>'
-          '<label>Count notes (optional)<input name="notes" maxlength="300"></label>'
-          '<button type="submit">Save cash count</button></form>')
-    if cash_counts:
-        content.append('<h3>Safe-count history</h3><div class="wrap"><table>'
-          '<thead><tr><th>Date</th><th>Account</th><th>In safe</th><th>Recorded</th><th>Difference</th><th>Notes</th></tr></thead><tbody>')
-        for count in cash_counts:
-            diff=int(count["variance_cents"])
-            sign=('+' if diff>0 else '-' if diff<0 else '')
-            content.append('<tr><td>'+e(count["count_date"])+'</td>'
-              +'<td>'+e(count["account_name"])+'</td>'
-              +'<td>
+    choices="".join('<option value="%s">%s</option>' % (str(a["id"]),e(a["name"])) for a in cash_rows)
+    content.append('<section><h2>Count cash in the safe</h2>')
+    content.append('<p class="muted">Compare cash physically in the safe with the register. Save the count without changing recorded transactions.</p>')
+    content.append('<form method="post" action="/bank/cash-count">')
+    content.append('<label>Cash account<select name="account_id">'+choices+'</select></label>')
+    content.append('<label>Amount in safe ($)<input type="number" name="counted_amount" min="0" step=".01" required></label>')
+    content.append('<label>Date<input type="date" name="count_date" value="'+date.today().isoformat()+'" required></label>')
+    content.append('<label>Notes<input name="notes" maxlength="300"></label>')
+    content.append('<button>Save cash count</button></form>')
+    if count_rows:
+        content.append('<h3>Past cash counts</h3>')
+        for count in count_rows:
+            variance=int(count["variance_cents"])
+            label=('+' if variance>0 else '-' if variance<0 else '')
+            content.append('<p>'+e(count["count_date"])+' — '+e(count["account_name"])+' — Counted 
     if provider_ready:
         content.append('<a class="button" href="/bank/connect">Connect bank</a> '
           +'<form method="post" action="/bank/sync" style="display:inline"><button>Refresh bank balances &amp; activity</button></form>')
@@ -124,8 +120,7 @@ table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:9px;bord
         content.append('</tbody></table></div></section>')
     content.append('</main></body></html>')
     return "".join(content)
-+bank_ledger.amount(count["counted_cents"])+'</td>'
-              +'<td>
++bank_ledger.amount(count["counted_cents"])+'; recorded 
     if provider_ready:
         content.append('<a class="button" href="/bank/connect">Connect bank</a> '
           +'<form method="post" action="/bank/sync" style="display:inline"><button>Refresh bank balances &amp; activity</button></form>')
@@ -165,8 +160,7 @@ table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:9px;bord
         content.append('</tbody></table></div></section>')
     content.append('</main></body></html>')
     return "".join(content)
-+bank_ledger.amount(count["expected_cents"])+'</td>'
-              +'<td>'+sign+'
++bank_ledger.amount(count["expected_cents"])+'; difference '+label+'
     if provider_ready:
         content.append('<a class="button" href="/bank/connect">Connect bank</a> '
           +'<form method="post" action="/bank/sync" style="display:inline"><button>Refresh bank balances &amp; activity</button></form>')
@@ -206,9 +200,7 @@ table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:9px;bord
         content.append('</tbody></table></div></section>')
     content.append('</main></body></html>')
     return "".join(content)
-+bank_ledger.amount(abs(diff))+'</td>'
-              +'<td>'+e(count["notes"])+'</td></tr>')
-        content.append('</tbody></table></div>')
++bank_ledger.amount(abs(variance))+' — '+e(count["notes"])+'</p>')
     content.append('</section>')
     content.append('<section><h2>Bank connection</h2>')
     if provider_ready:
