@@ -57,3 +57,9 @@ PY
   exit 1
 }
 
+
+# Confirm customers, internal quotes, and service orders really work.
+ABD_BOOTSTRAP_DB="$ROOT/build/smoke-java/data/en/bsdb.db" \
+ABD_BOOTSTRAP_ENV="$ROOT/build/smoke-java/desk.env" \
+PYTHONPATH="$ROOT/integrations/all_by_devoll" \
+python3 "$ROOT/integrations/all_by_devoll/smoke_native.py"
