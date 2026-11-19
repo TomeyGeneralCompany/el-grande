@@ -24,7 +24,7 @@ The reporting destination defaults to `isaiztomey7@gmail.com`, and can be change
 
 ## Installer download
 
-In this repository, open **Actions → El Grande Zorin installer**, choose the latest successful run and download the **el-grande-zorin-deb** artifact. Unzip it with the Files graphical archive manager; double-click `el-grande_0.3.0_all.deb` to install through Zorin's graphical software installer. The software installer may ask for the *computer administrator's password* to install system packages — this is different from an application login and is managed by Zorin.
+In this repository, open **Actions → El Grande Zorin installer**, choose the latest successful run and download the **el-grande-zorin-deb** artifact. Unzip it with the Files graphical archive manager; double-click `el-grande_0.4.0_all.deb` to install through Zorin's graphical software installer. The software installer may ask for the *computer administrator's password* to install system packages — this is different from an application login and is managed by Zorin.
 
 Once installed, use the El Grande desktop entry; the first launch shows the setup wizard, and later launches go straight to the dashboard.
 
@@ -74,3 +74,18 @@ Email setup is intentionally minimal: **Settings → Business email** has the sh
 Local BlueSeer processes and SQLite runtime are installed together and brought up automatically. A running BlueSeer API does **not** by itself prove that business-specific AR codes, items, and account permissions are valid. Native invoice/GL posting remains disabled until those records have been verified. Ordinary job tickets and final bills continue to work locally without that step; do not represent them as reconciled BlueSeer journal entries.
 
 The old graphical setup application remains in the package as a backward-compatibility script path only. The default installation exposes only one El Grande app icon.
+
+
+## El Grande 0.4.0: actual native BlueSeer connection on install
+
+The same app launcher prepares the bundled SQLite database, starts the local Java BlueSeer API, verifies BlueSeer user login and loopback access, and provisions native service-item records for labor, parts, travel and other charges. It uses the BlueSeer authenticated APIs for business master records, not a mock or a second disconnected database.
+
+The original upstream sample ERP database may contain an unencoded default admin password that the Java API cannot authenticate. For this untouched seed only, the bootstrap generates an internal random credential, transforms it using the upstream password storage routine, saves the generated credential to the user's protected settings file, and allows only 127.0.0.1 in the seeded account's IP permission records. Existing changed passwords and customized business records are not overwritten. If the seeded company is still labeled "MFG Company", the native site update API changes it to "All by Devoll" (Manistee, MI); modified business names are preserved.
+
+The native BlueSeer quote and service-order identifiers are deterministic numeric values in the reserved range `900000000 + ticket_id`. That is necessary because native BlueSeer getters parse those fields as integers; string job IDs are unsuitable and caused the previous integration to silently fail read-backs.
+
+On a completed job **after the ERP connector is initialized**, El Grande queues native customer creation/verification and a native service order in the background. The existing job record, completed-work details, owner report and 15% calculation are retained even if BlueSeer temporarily fails. Deterministic IDs, read-back verification and retries prevent duplicate creation. The job's expanded completed record shows its current BlueSeer sync state. An actual final bill different from the estimate is flagged for reconciliation rather than creating a mismatched native order.
+
+The integration build checks **a real BlueSeer Java server backed by a disposable copy of the bundled SQLite database**, completing native login, item master creation, business-site setup, customer creation, quote and service-order creation, native read-back idempotency, and a test AR/GL invoice. The disposable invoice test does not post a production transaction. Live production AR/GL posting stays disabled until the company's tax, chart of accounts and invoice settings have been confirmed.
+
+Upgrading to 0.4.0 preserves the existing local ticket and BlueSeer databases. No email credentials are needed to run the native ERP integration. Gmail remains optional.

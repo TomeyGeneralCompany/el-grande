@@ -111,6 +111,20 @@ def open_dashboard():
     if api.returncode:
         messagebox.showwarning("Accounting","BlueSeer could not start automatically. "
                                "The shop dashboard will still open.")
+    # Authenticate to our already-bundled BlueSeer engine and register the
+    # actual shop service items. Do not require operator terminal instructions.
+    bootstrap=APP / "integrations" / "all_by_devoll" / "erp_bootstrap.py"
+    if bootstrap.exists():
+        try:
+            prepared=subprocess.run(
+                ["/usr/bin/python3",str(bootstrap)],capture_output=True,
+                text=True,timeout=35)
+            if prepared.returncode==0:
+                # Job Desk can pick up confirmed native API credentials only
+                # after a service restart; no tickets are deleted.
+                service("restart","el-grande-desk.service")
+        except (OSError,subprocess.TimeoutExpired):
+            pass
     if try_dashboard():
         webbrowser.open(URL)
         return

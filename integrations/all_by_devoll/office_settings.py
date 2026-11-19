@@ -100,6 +100,9 @@ def page(settings,status):
         "connected":"Gmail login successful.",
         "failed":"Gmail login could not be verified.",
     }.get(status,"")
+    connected=(settings.get("ABD_BLUESEER_CONNECTED")=="yes" and local_erp_running())
+    erp_caption="Connected to BlueSeer" if connected else (
+        "Local service running — connection not complete" if local_erp_running() else "Local service not responding")
     return """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Settings | All by Devoll</title>
 <style>:root{color-scheme:light}*{box-sizing:border-box}body{margin:0;background:#f5f7f6;color:#193634;font:15px/1.5 system-ui,sans-serif}header{background:#123f3e;color:white;padding:22px max(24px,calc((100% - 800px)/2));font-weight:700;font-size:20px}main{max-width:800px;margin:26px auto;padding:0 20px}a{color:#176961}h1{font-size:25px}section{background:white;border:1px solid #dce6e2;border-radius:14px;padding:25px;margin:17px 0}label{display:block;font-weight:600;font-size:13px;margin:14px 0 5px}input{display:block;width:100%;border:1px solid #cbd8d5;border-radius:8px;padding:11px;font:inherit}button{background:#176961;color:white;border:0;border-radius:8px;padding:11px 17px;cursor:pointer;font-weight:700;margin-top:16px}.muted{color:#647876}.notice{padding:12px;background:#e5f1ed;border-radius:8px}.actions{display:flex;gap:10px;flex-wrap:wrap}.actions form{display:inline-block}p{line-height:1.6}</style></head><body>
 <header>ALL BY DEVOLL</header><main><a href="/">← Back to jobs</a><h1>Settings</h1>""" + (
@@ -112,6 +115,6 @@ def page(settings,status):
 <p class="muted">This is the only Google authorization needed for automatic website requests and owner reports. You can <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener noreferrer">open Google's app-password page</a> while signed into the business Gmail account. You may need to enable Google's two-step verification first.</p>
 <button type="submit">Save email connection</button></form><form method="post" action="/settings/test-gmail"><button type="submit">Test Gmail connection</button></form></section>
 <section><h2>Accounting</h2>
-<p>BlueSeer is bundled with El Grande and starts on this computer automatically.</p><p><strong>Local BlueSeer service: """+("Running" if local_erp_running() else "Not responding")+"""</strong></p>
+<p>BlueSeer is bundled with El Grande and starts on this computer automatically.</p><p><strong>"""+escape(erp_caption)+"""</strong></p>
 <p class="muted">The shop can record jobs and invoices locally. Native BlueSeer accounting posting is kept off until the shop's accounts and item records are validated, so no unverified financial transactions are created.</p>
 </section></main></body></html>"""
