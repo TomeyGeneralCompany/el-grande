@@ -73,9 +73,10 @@ def init(con):
     con.execute("INSERT OR IGNORE INTO money_accounts(name,kind) VALUES('Business bank','bank')")
     # Existing customer receipts from older El Grande versions are brought in
     # exactly once. The register is not a second AR/invoice posting mechanism.
-    for p in con.execute("""SELECT id,paid_on,method,applied,reference,voided_at
-                             FROM customer_payments ORDER BY id""").fetchall():
-        import_payment(con,p)
+    if con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='customer_payments'").fetchone():
+        for p in con.execute("""SELECT id,paid_on,method,applied,reference,voided_at
+                                 FROM customer_payments ORDER BY id""").fetchall():
+            import_payment(con,p)
 def accounts(con):
     return con.execute("""SELECT a.*,(a.opening_cents+COALESCE(
        (SELECT SUM(e.amount_cents) FROM money_entries e WHERE e.account_id=a.id),0
