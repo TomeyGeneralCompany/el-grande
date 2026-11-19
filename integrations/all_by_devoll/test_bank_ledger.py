@@ -90,6 +90,49 @@ class MoneyLedgerTests(unittest.TestCase):
             self.assertIn(phrase,html)
         self.assertIn("Transfer / cash deposit",html)
         self.assertNotIn("Plaid.create",html)
+    def test_safe_count_exact_match_and_duplicate_snapshots(self):
+        desk.record_customer_payment(self.job,{"amount_received":"300","method":"cash"})
+        with desk.db() as con:
+            cash=bank_ledger.cash_accounts(con)[0]
+            first,diff=bank_ledger.record_cash_count(con,{"account_id":str(cash["id"]),
+                  "counted_amount":"300.00","notes":"End of shift count"})
+            self.assertEqual(diff,0)
+            second,diff=bank_ledger.record_cash_count(con,{"account_id":str(cash["id"]),
+                  "counted_amount":"290.00","notes":"Recount"})
+            self.assertEqual(diff,-1000)
+            self.assertNotEqual(first,second)
+            self.assertEqual(bank_ledger.accounts(con)[0]["balance_cents"],30000)
+            hist=bank_ledger.recent_cash_counts(con)
+            self.assertEqual(hist[0]["expected_cents"],30000)
+            self.assertEqual(hist[0]["counted_cents"],29000)
+            self.assertEqual(hist[0]["variance_cents"],-1000)
+            self.assertEqual(hist[1]["variance_cents"],0)
+    def test_safe_count_surplus_ignores_non_cash_accounts(self):
+        desk.record_customer_payment(self.job,{"amount_received":"200","method":"cash"})
+        with desk.db() as con:
+            cash,bank=bank_ledger.accounts(con)[:2]
+            bank_ledger.transfer(con,{"from_account":str(cash["id"]),"to_account":str(bank["id"]),
+                  "amount":"75"})
+            ident,diff=bank_ledger.record_cash_count(con,{"account_id":cash["id"],"counted_amount":"135"})
+            self.assertEqual(diff,1000)
+            self.assertEqual(bank_ledger.accounts(con)[0]["balance_cents"],12500)
+            self.assertEqual(bank_ledger.accounts(con)[1]["balance_cents"],7500)
+            with self.assertRaises(ValueError):
+                bank_ledger.record_cash_count(con,{"account_id":bank["id"],"counted_amount":"75"})
+    def test_safe_count_rejects_bad_amounts_and_is_not_a_ledger_adjustment(self):
+        with desk.db() as con:
+            cash=bank_ledger.cash_accounts(con)[0]
+            for invalid in ("NaN","-1","10.001","abc",""):
+                with self.assertRaises(ValueError):
+                    bank_ledger.record_cash_count(con,{"account_id":cash["id"],
+                         "counted_amount":invalid})
+            self.assertEqual(len(bank_ledger.recent_cash_counts(con)),0)
+            bank_ledger.record_cash_count(con,{"account_id":cash["id"],"counted_amount":"0"})
+            self.assertEqual(con.execute("SELECT count(*) FROM money_entries").fetchone()[0],0)
+            screen=bank_ui.page(con,False)
+            self.assertIn("Count cash in the safe",screen)
+            self.assertIn('action="/bank/cash-count"',screen)
+            self.assertIn("Safe-count history",screen)
     def test_customer_gross_split_not_modified(self):
         with desk.db() as con:
             job=con.execute("SELECT * FROM tickets").fetchone()
