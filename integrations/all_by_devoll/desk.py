@@ -360,6 +360,15 @@ def erp_poller():
             log.exception("ERP job synchronization failed; job records are retained")
         time.sleep(30)
 
+def bank_poller():
+    while True:
+        try:
+            if bank_connect.ready()[0]:
+                with db() as con:bank_connect.sync(con)
+        except Exception as exc:
+            log.warning("Bank refresh unavailable; local cashbook continues working: %s",exc)
+        time.sleep(3600)
+
 def report_poller():
     while True:
         try:
@@ -821,6 +830,7 @@ def main():
     threading.Thread(target=poller,daemon=True).start()
     threading.Thread(target=report_poller,daemon=True).start()
     threading.Thread(target=erp_poller,daemon=True).start()
+    threading.Thread(target=bank_poller,daemon=True).start()
     if any(os.getenv(p+"_URL") for p in ("ABD_DETROIT_AXLE","ABD_AUTOZONE","ABD_PARTS_FEED")):
         threading.Thread(target=parts_poller,daemon=True).start()
     else:log.warning("Mailbox importer disabled; configure ABD_IMAP_USER and ABD_IMAP_APP_PASSWORD")
