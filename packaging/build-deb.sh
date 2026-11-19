@@ -2,7 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT="$PWD"
-VERS="${1:-0.7.0}"
+VERS="${1:-0.8.0}"
 OUT="$ROOT/artifacts"
 PKG="$ROOT/build/el-grande-package"
 rm -rf "$PKG"

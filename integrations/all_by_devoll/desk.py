@@ -32,6 +32,7 @@ import job_reports
 import shop_ui
 import office_settings
 import erp_jobs
+import erp_receipts
 import customer_payments
 import invoice_pdf
 import urllib.error
@@ -133,6 +134,7 @@ def init():
             con.execute("ALTER TABLE tickets ADD COLUMN blue_customer TEXT NOT NULL DEFAULT ''")
         if "blue_ship_to" not in cols:
             con.execute("ALTER TABLE tickets ADD COLUMN blue_ship_to TEXT NOT NULL DEFAULT ''")
+        erp_receipts.init_queue(con)
 
 def cash(value):
     try:
@@ -349,6 +351,7 @@ def erp_poller():
     while True:
         try:
             erp_jobs.process_once(db,amounts)
+            erp_receipts.process_once(db)
         except Exception:
             log.exception("ERP job synchronization failed; job records are retained")
         time.sleep(30)

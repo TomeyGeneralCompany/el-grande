@@ -71,4 +71,33 @@ def main():
           "amount",str(final_math["basis"]))
 
 
+    # Real native BlueSeer accounts-receivable payment, partial receipt,
+    # idempotent re-read, and correction against a disposable invoice.
+    import erp_receipts
+    opening,_=erp_receipts.native_ar(client,shipper)
+    assert opening and opening["ar_type"]=="I",opening
+    print("Native invoice open amount before receipt:",opening["ar_open_amt"])
+    receipt={"id":950001,"ticket_id":950001,"method":"cash","applied":"125.25",
+             "paid_on":"2026-11-18","reference":"","voided_at":None}
+    paid_ref=erp_receipts.post(client,receipt,shipper,cust,"BK","payment")
+    assert paid_ref=="700950001"
+    paid_again=erp_receipts.post(client,receipt,shipper,cust,"BK","payment")
+    assert paid_again==paid_ref
+    after,_=erp_receipts.native_ar(client,shipper)
+    print("Native AR open after partial cash payment:",after["ar_open_amt"])
+    assert abs(float(after["ar_open_amt"])-250.00)<0.01, after
+    corrected=erp_receipts.post(client,receipt,shipper,cust,"BK","reversal")
+    assert corrected=="600950001"
+    restored,_=erp_receipts.native_ar(client,shipper)
+    print("Native AR open after receipt reversal:",restored["ar_open_amt"])
+    assert abs(float(restored["ar_open_amt"])-375.25)<0.01,restored
+    full=dict(receipt,id=950002,applied="375.25")
+    full_id=erp_receipts.post(client,full,shipper,cust,"BK","payment")
+    assert full_id=="700950002"
+    closed,_=erp_receipts.native_ar(client,shipper)
+    print("Native AR open after final full payment:",closed["ar_open_amt"])
+    assert abs(float(closed["ar_open_amt"]))<0.01,closed
+    assert closed["ar_status"]=="c",closed
+    print("Native cash receipt, partial/full AR settlement, GL and reversal PASS")
+
 if __name__=="__main__":main()

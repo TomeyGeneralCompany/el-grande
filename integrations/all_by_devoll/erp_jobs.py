@@ -6,7 +6,8 @@ Transaction ordering:
   3. Native service order is posted/verified using a deterministic order number.
   4. Only then is local blue_sync marked synced.
 
-No automatic GL invoice or customer message is sent here.
+Native invoice/AR/GL entries are posted on completion; receipts are applied
+automatically by erp_receipts after the invoice is confirmed.
 """
 import json
 import logging
