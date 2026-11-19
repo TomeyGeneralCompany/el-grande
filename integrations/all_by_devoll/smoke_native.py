@@ -1,15 +1,101 @@
 #!/usr/bin/env python3
-"""End-to-end native customer / quote / service-order test on a disposable ERP DB.
+"""End-to-end native transaction checks on a disposable ERP DB.
 
 CI only: must be called with ABD_BOOTSTRAP_DB pointing into build/smoke-java,
-never the office user's real database. No customer emails or invoice postings.
+never the office user's real database. No customer emails or live postings.
 """
+import json
 import os
+import sqlite3
+from datetime import date
 from pathlib import Path
 from decimal import Decimal
 import blue_bridge
 import customer_bridge
 import erp_bootstrap
+
+def check_stock_workflows(client, path):
+    """Create and receive a purchase order and schedule a work order."""
+    site = os.environ["ABD_BLUESEER_SITE"]
+    user = os.environ["ABD_BLUESEER_USER"]
+    item = "ABD-SMOKE-STOCK"
+    order = "89000001"
+    receiver = "89000002"
+    today = date.today().isoformat()
+
+    item_payload = erp_bootstrap.service_item_payload(item, "Installer test stock", site)
+    item_payload.update(it_type="P", it_code="P", it_group="", it_wh="MAIN", it_loc="MAINLOC")
+    client.post("dataServINV", "addItemMstr", json.dumps(item_payload))
+    assert client.get("dataServINV", "getItemMstr", item)["it_item"] == item
+
+    po = blue_bridge.record(
+        """po_nbr po_vend po_ord_date po_due_date po_rmks po_shipvia po_status po_userid
+        po_type po_curr po_terms po_site po_buyer po_ap_acct po_ap_cc po_ship
+        po_edistatus po_confirm po_taxcode po_entrytype""".split(),
+        po_nbr=order, po_vend="ACME", po_ord_date=today, po_due_date=today, po_status="open",
+        po_userid=user, po_curr="USD", po_terms="N00", po_site=site,
+        po_ap_acct="30000000", po_ap_cc="9999",
+    )
+    address = blue_bridge.record(
+        """poa_code poa_shipto poa_name poa_line1 poa_line2 poa_line3 poa_city poa_state
+        poa_zip poa_country poa_contact poa_phone poa_email""".split(),
+        poa_code=order, poa_shipto=site, poa_name="Installer test address",
+    )
+    line = blue_bridge.record(
+        """pod_nbr pod_line pod_item pod_venditem pod_ord_qty pod_rcvd_qty pod_netprice
+        pod_disc pod_listprice pod_due_date pod_status pod_site pod_ord_date pod_uom
+        pod_desc pod_ship pod_taxcode pod_taxamt""".split(),
+        pod_nbr=order, pod_line=1, pod_item=item, pod_ord_qty=3, pod_rcvd_qty=0, pod_netprice=12,
+        pod_listprice=12, pod_disc=0, pod_taxamt=0, pod_due_date=today, pod_status="open",
+        pod_site=site, pod_ord_date=today, pod_uom="EA", pod_desc="Installer test stock",
+    )
+    client.post("dataServPUR", "addPOTransaction",
+                "=_=".join(map(json.dumps, ([line], address, po, [], [], []))))
+    assert order in client.get("dataServPUR", "getPOListByVend", "ACME")
+
+    receipt = blue_bridge.record(
+        """rv_id rv_vend rv_recvdate rv_status rv_packingslip rv_userid rv_ap_acct rv_ap_cc
+        rv_terms rv_site rv_confdate rv_ref rv_rmks""".split(),
+        rv_id=receiver, rv_vend="ACME", rv_recvdate=today, rv_status="0", rv_userid=user,
+        rv_ap_acct="30000000", rv_ap_cc="9999", rv_terms="N00", rv_site=site,
+    )
+    received = blue_bridge.record(
+        """rvd_id rvd_po rvd_poline rvd_packingslip rvd_item rvd_qty rvd_date rvd_listprice
+        rvd_netprice rvd_disc rvd_lot rvd_wh rvd_serial rvd_loc rvd_jobnbr rvd_site
+        rvd_status rvd_rline rvd_voqty rvd_cost rvd_uom""".split(),
+        rvd_id=receiver, rvd_po=order, rvd_poline=1, rvd_item=item, rvd_qty=3,
+        rvd_date=today, rvd_listprice=12, rvd_netprice=12, rvd_disc=0, rvd_wh="MAIN",
+        rvd_loc="MAINLOC", rvd_site=site, rvd_status="0", rvd_rline=1, rvd_voqty=0,
+        rvd_cost=12, rvd_uom="EA",
+    )
+    client.post("dataServRCV", "addReceiverTransaction",
+                "=_=".join(map(json.dumps, ([received], receipt, None, None))))
+    assert receiver in client.call("dataServRCV", "getReceiversFromPO", param1=order, param2="all")
+    assert client.get("dataServPUR", "getPODet", order)[0]["pod_rcvd_qty"] == 3
+    with sqlite3.connect(path) as db:
+        assert db.execute("SELECT SUM(in_qoh) FROM in_mstr WHERE in_item=?", (item,)).fetchone()[0] == 3
+
+    plan = {
+        "plan_nbr": 89000003,
+        "plan_item": item,
+        "plan_site": site,
+        "plan_qty_req": 3,
+        "plan_qty_sched": 3,
+        "plan_date_create": today,
+        "plan_date_due": today,
+        "plan_date_sched": today,
+        "plan_rmks": "",
+        "plan_order": order,
+        "plan_line": "1",
+        "plan_type": "WO",
+        "plan_cell": "INSTALLER",
+        "plan_is_sched": 1,
+    }
+    client.post("dataServSCH", "addPlanMstr", json.dumps(plan))
+    scheduled = client.call("dataServSCH", "getPlanMstr", param1=str(plan["plan_nbr"]), param2="")
+    assert scheduled["plan_date_sched"] == today and scheduled["plan_qty_sched"] == 3
+    print("Packaged ERP inventory, purchase order, receipt, stock update and work-order scheduling PASS")
+
 
 def main():
     path=Path(os.environ.get("ABD_BOOTSTRAP_DB",""))
@@ -28,6 +114,7 @@ def main():
     }
     total={"labor":Decimal("170.00"),"total":Decimal("310.00")}
     client=blue_bridge.BlueSeerClient()
+    check_stock_workflows(client, path)
     customer,created=customer_bridge.upsert_customer(ticket,client)
     assert customer=="ABD950000"
     ticket["blue_customer"]=customer
@@ -41,7 +128,6 @@ def main():
     print("Native service order first/second:",order_result,order_second[1])
     print("Native quote response:",str(client.get("dataServORD","getQuoteMstr",quote))[:300])
     print("Native order response:",str(client.get("dataServORD","getServiceOrderMstr",order))[:300])
-    import sqlite3
     with sqlite3.connect(str(path)) as db:
         for table in ("cm_mstr","quo_mstr","sv_mstr"):
             cols=[x[1] for x in db.execute('PRAGMA table_info("'+table+'")')]

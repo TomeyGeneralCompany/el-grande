@@ -29,6 +29,7 @@ import parts
 import blue_bridge
 import invoice_bridge
 import job_reports
+import job_calendar
 import shop_ui
 import office_settings
 import erp_jobs
@@ -124,7 +125,7 @@ def db():
 
 def init():
     with db() as con:
-        con.executescript(SCHEMA + parts.DDL + job_reports.DDL + erp_jobs.DDL + customer_payments.DDL + """
+        con.executescript(SCHEMA + parts.DDL + job_reports.DDL + job_calendar.DDL + erp_jobs.DDL + customer_payments.DDL + """
         CREATE TABLE IF NOT EXISTS blue_sync (
           ticket_id INTEGER NOT NULL, kind TEXT NOT NULL,
           record_number TEXT NOT NULL, state TEXT NOT NULL,
@@ -601,8 +602,8 @@ def system_status():
                 (os.getenv("ABD_REPORT_SMTP_APP_PASSWORD") or os.getenv("ABD_IMAP_APP_PASSWORD"))),
             "erp":erp_status()}
 
-def render(rows,catalog=None):
-    return shop_ui.render(rows,catalog or [],db,amounts,system_status())
+def render(rows,catalog=None,calendar_month="",edit_appointment=""):
+    return shop_ui.render(rows,catalog or [],db,amounts,calendar_month,edit_appointment)
 
 class Handler(BaseHTTPRequestHandler):
     def response_headers(self,code=200,typ="text/html; charset=utf-8",csp=None):
@@ -648,7 +649,8 @@ class Handler(BaseHTTPRequestHandler):
                 rows=con.execute("SELECT * FROM tickets ORDER BY id DESC LIMIT 500").fetchall()
                 partq=parse_qs(urlsplit(self.path).query).get("partq",[""])[0].strip()
                 catalog=parts.search(con,partq[:100],limit=100) if partq else con.execute("SELECT * FROM supplier_parts ORDER BY checked_at DESC LIMIT 100").fetchall()
-            return self.response_text(render(rows,catalog))
+            return self.response_text(render(rows,catalog,searchparams.get("calendar",[""])[0],
+                                             searchparams.get("edit_appointment",[""])[0]))
         if path=="/bank/export.csv":
             with db() as con:
                 data=io.StringIO()
@@ -750,6 +752,18 @@ class Handler(BaseHTTPRequestHandler):
         data={k:v[0] for k,v in parse_qs(self.rfile.read(size).decode("utf-8",errors="replace"),keep_blank_values=True).items()}
         path=urlsplit(self.path).path
         try:
+            if path in ("/appointments/save", "/appointments/remove"):
+                ticket_id = int(data.get("ticket_id", ""))
+                if not 0 < ticket_id <= 2**63 - 1:
+                    raise ValueError("Choose a valid job.")
+                with db() as con:
+                    if path == "/appointments/save":
+                        day = job_calendar.schedule(con, ticket_id, data.get("date", ""), data.get("time", ""))
+                        month = day.isoformat()[:7]
+                    else:
+                        con.execute("DELETE FROM job_appointments WHERE ticket_id = ?", (ticket_id,))
+                        month = job_calendar.parse_month(data.get("calendar", ""), job_calendar.today()).isoformat()[:7]
+                return self.redirect(f"/?calendar={month}#calendar")
             if path=="/bank/provider-settings":
                 bank_connect.setup(data)
                 return self.redirect("/settings?status=plaid-saved")

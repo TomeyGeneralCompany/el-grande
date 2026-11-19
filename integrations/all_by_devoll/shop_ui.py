@@ -12,6 +12,7 @@ from urllib.parse import urlencode
 import mavis_theme
 import dashboard_overview
 import job_reports
+import job_calendar
 import customer_payments
 from datetime import date
 
@@ -81,7 +82,7 @@ footer{border-top:1px solid var(--line);padding:20px 0;color:var(--muted);font-s
 nav .wrap{gap:18px}.jobbody{padding:0 12px 14px}}
 """
 
-CSS += mavis_theme.CSS
+CSS += mavis_theme.CSS + job_calendar.CSS
 
 def field(name, title, value="",kind="text",required=False,placeholder="",step=None):
     stepattr= ' step="'+esc(step)+'"' if step else ""
@@ -99,32 +100,12 @@ def postform(url,caption,css="action"):
 def state_name(s):
     return str(s).replace("_"," ").title()
 
-def connection_status(config,erp):
-    if config["mailbox"]:
-        mail=('Business inbox configured','good')
-    else:mail=('Business inbox not connected','')
-    if config["report"]:
-        report=('Owner reports configured','good')
-    else:report=('Owner reports not connected','')
-    if erp["running"] and erp["configured"]:
-        erptext=('BlueSeer responding · settings entered','good')
-    elif erp["running"]:
-        erptext=('BlueSeer responding · setup needed','')
-    else:
-        erptext=('BlueSeer not responding','bad')
-    return '<div class="statusbar">'+''.join(
-        '<div class="status-item"><span class="dot '+col+'"></span>'+esc(text)+'</div>'
-        for text,col in (mail,report,erptext))+'</div>'
-
-def render(rows,catalog,db,amounts,system=None):
-    system=system or {}
+def render(rows,catalog,db,amounts,calendar_month="",edit_appointment=""):
     counts=Counter(r["status"] for r in rows)
     pending=sum(1 for r in rows if not r["finalized_at"] and r["status"] not in ("cancelled","paid"))
     complete=sum(1 for r in rows if r["finalized_at"])
     inprogress=counts["in_progress"]+counts["approved"]
     new=counts["new"]
-    config={"mailbox":system.get("mailbox",False),"report":system.get("report",False)}
-    erp=system.get("erp",{"running":False,"configured":False})
     with db() as con:
         today_cash=con.execute("""SELECT applied FROM customer_payments
             WHERE method='cash' AND paid_on=? AND voided_at IS NULL""",
@@ -285,6 +266,7 @@ def render(rows,catalog,db,amounts,system=None):
 <div class="sidebar-links">
 <a href="#dashboard">⌂ &nbsp;Dashboard</a>
 <a href="#jobs">⚒ &nbsp;Jobs</a>
+<a href="#calendar">▦ &nbsp;Calendar</a>
 <a href="#jobs">♙ &nbsp;Customers</a>
 <a href="#jobs">▤ &nbsp;Invoices</a>
 <a href="/bank">$ &nbsp;Money &amp; Banks</a>
@@ -304,7 +286,7 @@ def render(rows,catalog,db,amounts,system=None):
 </div><hr class="dashboard-header-rule">
 <main class="dashboard-main">
 '''
-    content=dashboard_overview.render(rows,db,amounts)
+    content=dashboard_overview.render(rows,db,amounts,calendar_month,edit_appointment)
     content+='<div class="dashboard-jobdesk">'
     content+='<div class="cards">'+stats+'</div>'
     content+='<section class="panel" id="jobs"><div class="panelhead"><h2>Service jobs</h2><span class="muted small">'+str(len(rows))+' shown · Most recent first</span></div>'+''.join(items)+'</section>'

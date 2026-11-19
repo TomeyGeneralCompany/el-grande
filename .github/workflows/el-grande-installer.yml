@@ -36,13 +36,13 @@ jobs:
           java-version: '17'
       - name: Build full BlueSeer Java classes
         run: bash packaging/build-java.sh
-      - name: Smoke-test bundled local BlueSeer API
-        run: bash packaging/smoke-java-api.sh
       - name: Package and inspect .deb
         run: |
           bash packaging/build-deb.sh 0.13.0
           dpkg-deb -I artifacts/el-grande_0.13.0_all.deb
-          dpkg-deb -c artifacts/el-grande_0.13.0_all.deb | grep -E 'el-grande-launcher.py|desk.py|apiServer.class|el-grande.desktop|blueseer.sqlite' | head -20
+          dpkg-deb -c artifacts/el-grande_0.13.0_all.deb | grep -E 'el-grande-launcher.py|desk.py|apiServer.class|el-grande.desktop|data-template/en/bsdb.db'
+      - name: Smoke-test the packaged local BlueSeer API
+        run: bash packaging/smoke-java-api.sh artifacts/el-grande_0.13.0_all.deb
       - name: Upload double-click installer
         uses: actions/upload-artifact@v4
         with:

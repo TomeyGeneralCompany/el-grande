@@ -193,12 +193,6 @@ def recent_entries(con,limit=120):
     return con.execute("""SELECT e.*,a.name account_name FROM money_entries e
       JOIN money_accounts a ON a.id=e.account_id
       ORDER BY e.entry_date DESC,e.id DESC LIMIT ?""",(limit,)).fetchall()
-def rename_account(con,account_id,label):
-    label=str(label).strip()
-    if not label or len(label)>80:raise ValueError("Enter an account name (up to 80 characters)")
-    row=con.execute("SELECT id FROM money_accounts WHERE id=?",(account_id,)).fetchone()
-    if not row:raise ValueError("Account not found")
-    con.execute("UPDATE money_accounts SET name=? WHERE id=?",(label,account_id))
 def new_account(con,label):
     label=str(label).strip()
     if not label or len(label)>80:raise ValueError("Enter a name for the account")

@@ -2,6 +2,11 @@
 import tempfile
 import unittest
 import struct
+from threading import Thread
+from http.server import ThreadingHTTPServer
+from urllib.error import HTTPError
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
 from pathlib import Path
 from datetime import date
 from decimal import Decimal
@@ -55,7 +60,7 @@ class DashboardGoldTests(unittest.TestCase):
         self.assertIn("2018 Hyundai Santa Fe",page)
         self.assertIn("Starter replacement",page)
         self.assertIn("Jobs (open)",page)
-        self.assertIn("Upcoming Jobs",page)
+        self.assertIn("Job calendar",page)
         self.assertNotIn("Jacob M.",page)
         self.assertNotIn("Lisa R.",page)
     def test_cash_receipts_reflected_as_real_balances(self):
@@ -79,5 +84,56 @@ class DashboardGoldTests(unittest.TestCase):
         self.assertIn('href="/settings"',page)
         self.assertIn('href="/bank#cash-count"',page)
         self.assertIn("New service request",page)
+
+    def test_calendar_schedules_existing_job_reschedules_and_removes_it(self):
+        job,_=desk.create_ticket({"customer":"Shop <customer>","problem":"Replace starter"}, "manual:calendar")
+        # Exercise initialization on a database created before appointments existed.
+        with desk.db() as con:
+            con.execute("DROP TABLE job_appointments")
+        desk.init()
+
+        with ThreadingHTTPServer(("127.0.0.1", 0), desk.Handler) as server:
+            thread = Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+
+            def submit(path, **data):
+                request = Request(base + path, urlencode(data).encode(), headers={"Origin": base})
+                with urlopen(request, timeout=5) as response:
+                    return response.read().decode(), response.url
+
+            try:
+                page, url = submit("/appointments/save", ticket_id=job, date="2026-12-01", time="09:30")
+                self.assertIn("calendar=2026-12", url)
+                self.assertIn('id="appointments-2026-12-01"', page)
+                self.assertIn("Shop &lt;customer&gt;", page)
+                self.assertIn("9:30 AM", page)
+
+                with urlopen(base + f"/?calendar=2026-12&edit_appointment={job}", timeout=5) as response:
+                    editor = response.read().decode()
+                self.assertIn(f'<option value="{job}" selected>', editor)
+                self.assertIn('name="time" value="09:30"', editor)
+
+                page, _ = submit("/appointments/save", ticket_id=job, date="2027-01-05", time="13:00")
+                self.assertIn('id="appointments-2027-01-05"', page)
+                with desk.db() as con:
+                    self.assertEqual(con.execute("SELECT count(*) FROM job_appointments").fetchone()[0], 1)
+
+                with self.assertRaises(HTTPError) as invalid:
+                    submit("/appointments/save", ticket_id=job, date="2027-02-30", time="13:00")
+                self.assertEqual(invalid.exception.code, 400)
+                desk.finalize_ticket(job, "400.00")
+                with self.assertRaises(HTTPError) as finalized:
+                    submit("/appointments/save", ticket_id=job, date="2027-01-06", time="13:00")
+                self.assertEqual(finalized.exception.code, 400)
+
+                page, _ = submit("/appointments/remove", ticket_id=job, calendar="2027-01")
+                self.assertIn("No appointments this month.", page)
+                with desk.db() as con:
+                    self.assertEqual(con.execute("SELECT count(*) FROM job_appointments").fetchone()[0], 0)
+                    self.assertEqual(con.execute("SELECT id FROM tickets").fetchone()[0], job)
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
 
 if __name__=="__main__":unittest.main()
