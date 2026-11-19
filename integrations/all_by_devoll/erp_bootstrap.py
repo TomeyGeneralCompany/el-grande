@@ -65,6 +65,27 @@ def discover_database(path=ERP_DB):
             raise ValueError("Packaged default ERP administrator is not present; use existing credentials")
         return {"site":site,"ar_account":ar,"terms":terms}
 
+def allow_loopback_api_user(db_path,username):
+    """Permit only this workstation's API caller in BlueSeer's own user IP ACL.
+
+    The existing seeded ERP account can be valid while login is denied because
+    usr_meta has no 127.0.0.1 access record. Never allow remote clients.
+    """
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,40}",username):
+        raise ValueError("Invalid local ERP account")
+    with sqlite3.connect(str(db_path),timeout=8) as con:
+        actual={c[1] for c in con.execute('PRAGMA table_info("usr_meta")')}
+        keys={"usrm_id","usrm_type","usrm_key","usrm_value"}
+        if not keys.issubset(actual):
+            raise ValueError("BlueSeer user access table is not available")
+        prior=con.execute("""SELECT 1 FROM usr_meta
+           WHERE usrm_id=? AND usrm_type=? AND usrm_key=? AND usrm_value=? LIMIT 1""",
+           ("access","ip",username,"127.0.0.1")).fetchone()
+        if prior:return False
+        con.execute("""INSERT INTO usr_meta(usrm_id,usrm_type,usrm_key,usrm_value)
+           VALUES (?,?,?,?)""",("access","ip",username,"127.0.0.1"))
+        return True
+
 def service_item_payload(code,description,site):
     from datetime import date
     # Native Java record fields (invData.item_mstr), not a direct DB table mutation.
@@ -122,7 +143,9 @@ def configure(path=ERP_DB,envpath=ENV,client_factory=blue_bridge.BlueSeerClient)
     discovery=discover_database(path)
     user=settings.get("ABD_BLUESEER_USER") or "admin"
     password=settings.get("ABD_BLUESEER_PASSWORD") or "admin"
-    # Real live login through the local Java API. No inferred auth success.
+    # The local Java API checks both password and an explicit usr_meta IP
+    # ACL. This is a *loopback-only* workstation; never allow remote IPs.
+    allow_loopback_api_user(path,user)
     client=client_factory(base=API,user=user,password=password)
     client.authenticate()
     site=settings.get("ABD_BLUESEER_SITE") or discovery["site"]
