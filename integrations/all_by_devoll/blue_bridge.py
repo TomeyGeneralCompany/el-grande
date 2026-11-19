@@ -68,7 +68,11 @@ class BlueSeerClient:
         h.update(headers)
         return self.transport(self.base+"/"+path,h,body)
     def authenticate(self):
-        h={"id":"loginAPI","user":self.user,"pass":self.password,"sessionid":"","Content-Type":"text/plain"}
+        # BlueSeer's MainFrame.confirmServerLogin requires HTTP Basic
+        # Authorization; the legacy user/pass headers alone always yield 401.
+        token=base64.b64encode((self.user+":"+self.password).encode("utf-8")).decode("ascii")
+        h={"id":"loginAPI","user":self.user,"pass":self.password,
+           "Authorization":"Basic "+token,"sessionid":"","Content-Type":"text/plain"}
         raw=self.transport(self.base+"/authServ",h,b"").strip()
         if raw=="0" or not raw:raise BridgeError("BlueSeer authentication refused")
         try:self.session=base64.b64decode(raw,validate=True).decode()
