@@ -36,27 +36,7 @@ ABD_BOOTSTRAP_DB="$ROOT/build/smoke-java/data/en/bsdb.db" \
 ABD_BOOTSTRAP_ENV="$ROOT/build/smoke-java/desk.env" \
 ABD_BLUESEER_URL="http://127.0.0.1:18088/bsapi" \
 PYTHONPATH="$ROOT/integrations/all_by_devoll" \
-python3 "$ROOT/integrations/all_by_devoll/erp_bootstrap.py" || {
-  echo "BlueSeer native auth failed; printing bytecode signatures for debugging."
-  javap -c -p -classpath "$ROOT/lib/bsmf.jar" bsmf.MainFrame |
-    sed -n '/confirmServerLogin(/,/^  public static /p' | head -160 || true
-  javap -c -p -classpath "$ROOT/lib/bsmf.jar" bsmf.MainFrame |
-    sed -n '/public static boolean isValidUserLogin(/,/^  public static /p' | head -280 || true
-  javap -c -p -classpath "$ROOT/lib/bsmf.jar" bsmf.MainFrame |
-    sed -n '/public static java.lang.String PassWord(/,/^  public static /p' | head -180 || true
-  python3 - "$ROOT/build/smoke-java/data/en/bsdb.db" <<'PY'
-import sys,sqlite3
-with sqlite3.connect(sys.argv[1]) as db:
-    print("Local BlueSeer sample password length:",
-          db.execute("SELECT length(user_passwd) FROM user_mstr WHERE user_id='admin'").fetchone())
-    print("Local API access record count:",
-          db.execute("""SELECT count(*) FROM usr_meta WHERE usrm_id='access'
-            AND usrm_type='ip' AND usrm_key='admin' AND usrm_value='127.0.0.1'""").fetchone())
-PY
-  tail -70 "$ROOT/build/smoke-java/java-api.log"
-  exit 1
-}
-
+python3 "$ROOT/integrations/all_by_devoll/erp_bootstrap.py"
 
 # Confirm customers, internal quotes, and service orders really work.
 ABD_BOOTSTRAP_DB="$ROOT/build/smoke-java/data/en/bsdb.db" \
