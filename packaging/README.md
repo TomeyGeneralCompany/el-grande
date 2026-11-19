@@ -100,3 +100,16 @@ The installer configures `ABD_BLUESEER_ENABLE_LIVE_INVOICES=yes`, and native inv
 **Gross allocation is off the top:** Tomey General is entitled to 15% of the full customer invoice before any operating costs. The operator's 85% bears their expenses. The 15% allocation is tracked in job calculations/reports and is not a customer discount or a 15% reduction of invoice revenue. Native AR/GL invoicing is not itself a bank transfer to the parent.
 
 Production tax-code configuration remains an independent accounting matter; posting an invoice with no tax code is not proof of the proper sales tax treatment. Operators should set applicable tax rules in the accounting system; this release does not fabricate rates or claim that tax configuration was verified.
+
+
+## El Grande 0.6.0 — cash-first payments, not a card checkout
+
+The mechanic enters the **actual final customer bill**, with no separate tax line added by El Grande (tax-inclusive customer-price assumption). Parts need not be sold as separate checkout items. Whether and how the business owes sales tax is a separate tax compliance determination, not something the software assumes away.
+
+At job completion, the mechanic may optionally record cash collected at the job. Otherwise, the customer payment panel stays available on each completed job, defaulting to **cash**. Payment method options: cash, check, card, bank transfer, or other. He can record a partial payment or multiple subsequent installments, select the date money was received, and optionally add the check/transaction reference. For cash, the amount physically handed over may exceed the remaining balance: El Grande records **only the amount owed as revenue collected** and the excess as change returned. The dashboard calculates received versus unpaid amounts from an append-only local ledger and shows a job as paid **only when all recorded applied payments cover the final invoice**.
+
+Mistakes are corrected by voiding an entry with a required reason, never deleting or silently editing the payment history. The **Export payments** CSV includes payment date, method, tendered amount, applied amount, change, recorded timestamp, and any void correction. Cash receipts are **operator attestations**, not proof of a bank deposit or processor settlement.
+
+**Important BlueSeer boundary:** Native invoices and AR/GL charges are already posted by El Grande. Version 0.6 records customer collections in its protected local payment ledger, but does *not* automatically post BlueSeer AR cash-receipt or bank-deposit entries. Do not represent BlueSeer open-AR balances as paid from the local ledger alone. Native receipt allocation and undeposited-cash bookkeeping require their own reconciled transaction workflow. This release neither invents a bank deposit nor misclassifies cash in hand as funds deposited at a bank.
+
+Tomey General remains owed **15% of the full finalized customer bill before all operator expenses**, not 15% after parts or other costs, and not 15% of cash received so far. The operator bears expenses from their other 85%; this payment workflow does not automatically transfer either party's money.

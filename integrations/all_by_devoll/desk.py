@@ -32,6 +32,7 @@ import job_reports
 import shop_ui
 import office_settings
 import erp_jobs
+import customer_payments
 import urllib.error
 import customer_bridge
 from urllib.parse import parse_qs, urlsplit
@@ -118,7 +119,7 @@ def db():
 
 def init():
     with db() as con:
-        con.executescript(SCHEMA + parts.DDL + job_reports.DDL + erp_jobs.DDL + """
+        con.executescript(SCHEMA + parts.DDL + job_reports.DDL + erp_jobs.DDL + customer_payments.DDL + """
         CREATE TABLE IF NOT EXISTS blue_sync (
           ticket_id INTEGER NOT NULL, kind TEXT NOT NULL,
           record_number TEXT NOT NULL, state TEXT NOT NULL,
@@ -335,6 +336,10 @@ def finish_job(ticket_id,data):
                     (ticket_id,now,"bill_finalized",str(final)))
         job_reports.queue_report(con,ticket_id)
         erp_jobs.enqueue(con,ticket_id)
+        # Cash or any other payment recorded at completion is part of this
+        # same transaction. A rejected payment never finalizes the job.
+        if str(data.get("amount_received","")).strip():
+            customer_payments.record(con,ticket_id,data)
 
 def erp_poller():
     while True:
@@ -352,16 +357,14 @@ def report_poller():
         except Exception:log.exception("Owner report delivery failed")
         time.sleep(60)
 
-def mark_paid(ticket_id):
-    """Operator attestation that a finalized bill has been paid; not a bank transaction."""
+def record_customer_payment(ticket_id,data):
     with db() as con:
-        row=con.execute("SELECT status,finalized_at FROM tickets WHERE id=?",(ticket_id,)).fetchone()
-        if not row:raise LookupError("Ticket not found")
-        if not row["finalized_at"]:raise ValueError("Bill must be finalized first")
-        if row["status"]=="paid":return
-        now=utc()
-        con.execute("UPDATE tickets SET status='paid',updated_at=? WHERE id=?",(now,ticket_id))
-        con.execute("INSERT INTO events(ticket_id,timestamp,event,detail) VALUES(?,?,'marked_paid',?)",(ticket_id,now,"Operator-recorded paid status; no external bank verification"))
+        return customer_payments.record(con,ticket_id,data)
+
+def void_customer_payment(ticket_id,data):
+    with db() as con:
+        return customer_payments.void(con,ticket_id,
+               int(data.get("payment_id","0")),data.get("reason",""))
 
 def suggest(ticket_id):
     with db() as con:
@@ -616,6 +619,25 @@ class Handler(BaseHTTPRequestHandler):
                                   parse_qs(urlsplit(self.path).query).get("status",[""])[0]))
         if path=="/health":
             return self.response_text(json.dumps({"ok":True,"database":str(DB),"connections":system_status()}),typ="application/json")
+        if path=="/payments.csv":
+            with db() as con:
+                rows=con.execute("""SELECT p.*,t.customer,t.bill_total
+                    FROM customer_payments p JOIN tickets t ON t.id=p.ticket_id
+                    ORDER BY p.paid_on,p.id""").fetchall()
+            data=io.StringIO();writer=csv.writer(data)
+            writer.writerow(["payment_id","ticket","customer","paid_on","method",
+                 "cash_tendered_or_payment","applied_to_invoice","change_given",
+                 "reference","recorded_at","voided_at","void_reason","invoice_total"])
+            def safe(value):
+                value=str(value if value is not None else "")
+                return "'"+value if value.lstrip().startswith(("=","+","-","@")) else value
+            for p in rows:
+                writer.writerow([p["id"],"ABD-"+f'{p["ticket_id"]:06d}',
+                     safe(p["customer"]),p["paid_on"],p["method"],p["tendered"],
+                     p["applied"],p["change_given"],safe(p["reference"]),
+                     p["recorded_at"],p["voided_at"] or "",
+                     safe(p["void_reason"]),p["bill_total"]])
+            return self.response_text(data.getvalue(),typ="text/csv; charset=utf-8")
         if path=="/export.csv":
             with db() as con:rows=con.execute("SELECT * FROM tickets ORDER BY id").fetchall()
             data=io.StringIO();writer=csv.writer(data)
@@ -662,7 +684,7 @@ class Handler(BaseHTTPRequestHandler):
                 ident="manual:"+secrets.token_hex(16)
                 ident_id,_=create_ticket(data,ident)
             else:
-                found=re.fullmatch(r"/ticket/(\d+)/(update|finalize|complete|suggest|paid|part|blue-customer|blue-quote|blue-order|blue-invoice)",path)
+                found=re.fullmatch(r"/ticket/(\d+)/(update|finalize|complete|suggest|payment|void-payment|part|blue-customer|blue-quote|blue-order|blue-invoice)",path)
                 if not found:return self.response_text("Not found",404,"text/plain")
                 ident_id=int(found.group(1))
                 action=found.group(2)
@@ -670,7 +692,8 @@ class Handler(BaseHTTPRequestHandler):
                 if action=="finalize":finalize_ticket(ident_id,data.get("final_total",""))
                 if action=="complete":finish_job(ident_id,data)
                 if action=="suggest":suggest(ident_id)
-                if action=="paid":mark_paid(ident_id)
+                if action=="payment":record_customer_payment(ident_id,data)
+                if action=="void-payment":void_customer_payment(ident_id,data)
                 if action=="part":save_part(ident_id,data.get("supplier",""),data.get("sku",""),data.get("quantity","1"))
                 if action=="blue-customer":blue_customer(ident_id)
                 if action=="blue-quote":blue_sync(ident_id,"quote")

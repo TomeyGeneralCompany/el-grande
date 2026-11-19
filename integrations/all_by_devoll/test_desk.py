@@ -49,15 +49,17 @@ class DeskTest(unittest.TestCase):
         self.assertTrue(amount["finalized"])
         with self.assertRaises(ValueError):app.finalize_ticket(id_,"200")
         with self.assertRaises(ValueError):app.update_ticket(id_,{"parts_charge":"100"})
-    def test_paid_status_requires_finalized_bill(self):
+    def test_paid_status_requires_recorded_payment(self):
         id_=self.create()
-        with self.assertRaises(ValueError):app.mark_paid(id_)
+        with self.assertRaises(ValueError):
+            app.record_customer_payment(id_,{"amount_received":"350","method":"cash"})
         app.finalize_ticket(id_,"350")
-        app.mark_paid(id_)
+        app.record_customer_payment(id_,{"amount_received":"350","method":"cash"})
         self.assertEqual(self.row(id_)["status"],"paid")
-        app.mark_paid(id_)
+        with self.assertRaises(ValueError):
+            app.record_customer_payment(id_,{"amount_received":"350","method":"cash"})
         with app.db() as con:
-            n=con.execute("SELECT COUNT(*) FROM events WHERE ticket_id=? AND event='marked_paid'",(id_,)).fetchone()[0]
+            n=con.execute("SELECT COUNT(*) FROM customer_payments WHERE ticket_id=?",(id_,)).fetchone()[0]
         self.assertEqual(n,1)
     def test_zero_bill(self):
         id_=self.create();app.finalize_ticket(id_,"0")

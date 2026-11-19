@@ -10,6 +10,8 @@ from decimal import Decimal
 from urllib.parse import urlencode
 
 import job_reports
+import customer_payments
+from datetime import date
 
 def esc(value):
     return html.escape(str(value if value is not None else ""),quote=True)
@@ -31,7 +33,7 @@ main{max-width:1240px;margin:30px auto 80px;padding:0 24px}
 h1{font-size:29px;line-height:1.18;margin:0 0 7px;letter-spacing:-.03em}
 h2{font-size:20px;letter-spacing:-.02em;margin:0}h3{font-size:16px;margin:0 0 12px}
 .intro{display:flex;justify-content:space-between;align-items:center;gap:15px;margin-bottom:24px}.muted{color:var(--muted)}.intro p{margin:0}
-.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:24px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:14px;margin-bottom:24px}
 .metric{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 19px}
 .metric label{margin:0;color:var(--muted);font-size:12px}.metric strong{display:block;font-size:27px;letter-spacing:-.04em;margin-top:5px}
 .panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:22px;margin:18px 0}
@@ -119,7 +121,13 @@ def render(rows,catalog,db,amounts,system=None):
     new=counts["new"]
     config={"mailbox":system.get("mailbox",False),"report":system.get("report",False)}
     erp=system.get("erp",{"running":False,"configured":False})
-    metrics=[("Open jobs",pending),("New requests",new),("Active work",inprogress),("Completed jobs",complete)]
+    with db() as con:
+        today_cash=con.execute("""SELECT applied FROM customer_payments
+            WHERE method='cash' AND paid_on=? AND voided_at IS NULL""",
+            (date.today().isoformat(),)).fetchall()
+    daily_cash=sum((Decimal(x["applied"]) for x in today_cash),Decimal("0"))
+    metrics=[("Open jobs",pending),("New requests",new),("Active work",inprogress),
+             ("Completed jobs",complete),("Cash received today","$"+format(daily_cash,",.2f"))]
     stats=''.join('<div class="metric"><label>'+name+'</label><strong>'+str(value)+'</strong></div>' for name,value in metrics)
     items=[]
     for ticket in rows:
@@ -132,6 +140,8 @@ def render(rows,catalog,db,amounts,system=None):
             completed=con.execute("SELECT * FROM job_completions WHERE ticket_id=?",(n,)).fetchone()
             owner=con.execute("SELECT state FROM owner_reports WHERE ticket_id=?",(n,)).fetchone()
             native=con.execute("SELECT state,last_error FROM erp_jobs WHERE ticket_id=?",(n,)).fetchone()
+            receipts=customer_payments.payments(con,n) if done else []
+            paid_state=customer_payments.balance(con,n) if done else None
         status=ticket["status"]
         cls="done" if done else "alert" if status=="new" else ""
         jobheader=('<summary><div class="jobleft"><span class="jobid">ABD-'+f"{n:06d}"+'</span>'
@@ -189,12 +199,17 @@ def render(rows,catalog,db,amounts,system=None):
               field("actual_parts_cost","Actual parts cost ($)",ticket["parts_cost"],"number",step=".01")+
               field("actual_other_cost","Other expenses ($)","0","number",step=".01")+
               field("actual_invoice","Final customer bill ($)",f'{a["total"]:.2f}',"number",required=True,step=".01")+
-              '</div><div class="footactions">'+button("Save completed job","action danger")+'</div></form></section>')
+              '</div><h3>Customer paid now? (optional)</h3>'
+              '<p class="small muted">If unpaid, leave the amount blank. Cash is the default.</p>'
+              '<div class="fields">'+field("amount_received","Cash handed over ($)","", "number",step=".01")+
+              field("paid_on","Payment date",date.today().isoformat(),"date")+
+              '</div><input type="hidden" name="method" value="cash">'
+              '<div class="footactions">'+button("Save completed job","action danger")+'</div></form></section>')
             inner.append(completedform)
             native_html='<details class="inner"><summary>BlueSeer accounting</summary>'
             if sync:
                 native_html+='<p class="small muted">'+esc(", ".join(x["kind"]+": "+x["state"] for x in sync))+'</p>'
-            native_html+='<p class="small muted">Complete the accounting setup before creating financial records.</p>'
+            native_html+='<p class="small muted">BlueSeer customer and service-order records synchronize after job completion.</p>'
             native_html+='<form method="post" action="/ticket/'+str(n)+'/update">'
             native_html+=field("blue_customer","ERP customer code",ticket["blue_customer"])
             native_html+=field("blue_ship_to","ERP ship-to code",ticket["blue_ship_to"])
@@ -216,10 +231,47 @@ def render(rows,catalog,db,amounts,system=None):
                         ("BlueSeer order",esc(state_name(native["state"]) if native else "Not queued"))))+'</div></section>')
             else:
                 inner.append('<section class="worksection"><h3>Finalized job</h3><p>Invoice: $'+esc(ticket["bill_total"])+'</p></section>')
-            actions=(postform('/ticket/'+str(n)+'/paid',"Mark paid","action secondary") if status!="paid" else '<span class="pill done">Paid</span>')
-            if os.getenv("ABD_BLUESEER_ENABLE_LIVE_INVOICES")=="yes":
-                actions+=postform('/ticket/'+str(n)+'/blue-invoice',"Post ERP invoice","action danger")
-            inner.append('<div class="footactions">'+actions+'</div>')
+            method_labels={"cash":"Cash","check":"Check","card":"Card",
+                           "bank_transfer":"Bank transfer","other":"Other"}
+            payment_html=('<section class="worksection"><h3>Customer payments</h3>'
+                          '<div class="jobinfo">'
+                          '<div><span>Final bill (tax included)</span><b>$'+format(paid_state["invoice"],",.2f")+'</b></div>'
+                          '<div><span>Received</span><b>$'+format(paid_state["received"],",.2f")+'</b></div>'
+                          '<div><span>Still owed</span><b>$'+format(paid_state["due"],",.2f")+'</b></div></div>')
+            if paid_state["due"]>0:
+                choices=''.join('<option value="'+esc(k)+'"'+(' selected' if k=="cash" else '')+'>'+v+'</option>' for k,v in method_labels.items())
+                payment_html+=('<form method="post" action="/ticket/'+str(n)+'/payment">'
+                    '<div class="fields">'
+                    +field("amount_received","Amount customer handed over ($)",format(paid_state["due"],".2f"),"number",required=True,step=".01")
+                    +'<label>Payment method<select name="method">'+choices+'</select></label>'
+                    +field("paid_on","Date paid",date.today().isoformat(),"date")
+                    +field("reference","Check / transaction reference (optional)")
+                    +'</div>'+button("Record payment")+'</form>'
+                    '<p class="small muted">With cash, enter the amount handed over. Excess is recorded as change returned.</p>')
+            else:
+                payment_html+='<p class="pill done">Paid in full</p>'
+            if receipts:
+                payment_html+='<h3>Payment history</h3><ul class="list">'
+                for receipt in receipts:
+                    detail=('$'+esc(receipt["applied"])+' applied · '+esc(method_labels.get(receipt["method"],receipt["method"]))
+                            +' · '+esc(receipt["paid_on"]))
+                    if receipt["method"]=="cash" and Decimal(receipt["change_given"])>0:
+                        detail+=' · $'+esc(receipt["change_given"])+' change returned'
+                    if receipt["reference"]:
+                        detail+=' · '+esc(receipt["reference"])
+                    if receipt["voided_at"]:
+                        detail+=' · VOIDED ('+esc(receipt["void_reason"])+')'
+                    payment_html+='<li>'+detail
+                    if not receipt["voided_at"]:
+                        payment_html+=('<details class="inner"><summary>Correct payment</summary>'
+                           '<form method="post" action="/ticket/'+str(n)+'/void-payment">'
+                           '<input type="hidden" name="payment_id" value="'+str(receipt["id"])+'">'
+                           +field("reason","Reason for voiding",required=True)
+                           +button("Void payment entry","action secondary")+'</form></details>')
+                    payment_html+='</li>'
+                payment_html+='</ul>'
+            payment_html+='</section>'
+            inner.append(payment_html)
         items.append('<details class="ticket" id="ticket-'+str(n)+'">'+jobheader+
                      '<div class="jobbody">'+jobinfo+''.join(inner)+'</div></details>')
     if not items:
@@ -234,7 +286,7 @@ def render(rows,catalog,db,amounts,system=None):
     html_top='''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#123f3e"><title>All by Devoll | Shop Desk</title><style>'''+CSS+'''</style></head><body>
 <header><div class="wrap"><div class="brand"><div class="mark">AD</div><div><strong>ALL BY DEVOLL</strong><small>Mobile repair & service · Shop desk</small></div></div>
 <div class="topmeta">Office workspace <a href="/health">System status</a></div></div></header>
-<nav><div class="wrap"><a href="#jobs">Jobs</a><a href="#new">New request</a><a href="#catalogue">Parts</a><a href="/settings">Settings</a><a href="/export.csv">Export records</a></div></nav><main>
+<nav><div class="wrap"><a href="#jobs">Jobs</a><a href="#new">New request</a><a href="#catalogue">Parts</a><a href="/settings">Settings</a><a href="/export.csv">Export jobs</a><a href="/payments.csv">Export payments</a></div></nav><main>
 <div class="intro"><div><p class="eyebrow">Workshop overview</p><h1>Today's job desk</h1><p class="muted">Service requests, estimates and completed jobs in one place.</p></div><a class="action" href="#new">+ New service request</a></div>
 '''
     content='<div class="cards">'+stats+'</div>'
