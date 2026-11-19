@@ -80,7 +80,13 @@ table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:9px;bord
         for count in count_rows:
             variance=int(count["variance_cents"])
             label=('+' if variance>0 else '-' if variance<0 else '')
-            content.append('<p>'+e(count["count_date"])+' — '+e(count["account_name"])+' — Counted 
+            summary=(e(count["count_date"])+" / "+e(count["account_name"])+" / counted: "+
+              bank_ledger.amount(count["counted_cents"])+" USD; recorded: "+
+              bank_ledger.amount(count["expected_cents"])+" USD; difference: "+label+
+              bank_ledger.amount(abs(variance))+" USD; "+e(count["notes"]))
+            content.append("<p>"+summary+"</p>")
+    content.append("</section>")
+    content.append('<section><h2>Bank connection</h2>')
     if provider_ready:
         content.append('<a class="button" href="/bank/connect">Connect bank</a> '
           +'<form method="post" action="/bank/sync" style="display:inline"><button>Refresh bank balances &amp; activity</button></form>')
