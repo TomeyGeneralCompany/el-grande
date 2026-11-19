@@ -40,6 +40,8 @@ python3 "$ROOT/integrations/all_by_devoll/erp_bootstrap.py" || {
   echo "BlueSeer native auth failed; printing bytecode signatures for debugging."
   javap -c -p -classpath "$ROOT/lib/bsmf.jar" bsmf.MainFrame |
     sed -n '/confirmServerLogin(/,/^  public static /p' | head -160 || true
+  javap -c -p -classpath "$ROOT/lib/bsmf.jar" bsmf.MainFrame |
+    sed -n '/public static boolean isValidUserLogin(/,/^  public static /p' | head -280 || true
   tail -70 "$ROOT/build/smoke-java/java-api.log"
   exit 1
 }
