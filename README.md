@@ -18,4 +18,4 @@ bash packaging/build-deb.sh
 bash packaging/smoke-standalone.sh
 ```
 
-The previous Java implementation and its build are available through repository history. See [LICENSE](LICENSE) for the inherited notice.
+The previous Java implementation and its build are available through repository history. See [NOTICES](NOTICES) for the inherited notice.

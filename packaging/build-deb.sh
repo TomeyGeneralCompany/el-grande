@@ -17,7 +17,7 @@ cp -a integrations/all_by_devoll/brand/*.png "$PKG/opt/el-grande/integrations/al
 cp -a packaging/el-grande-launcher.py "$PKG/opt/el-grande/packaging/"
 cp -a packaging/el-grande.desktop "$PKG/usr/share/applications/"
 cp -a packaging/el-grande-desk.service "$PKG/usr/lib/systemd/user/"
-install -D -m 0644 LICENSE "$PKG/usr/share/doc/el-grande/copyright"
+install -D -m 0644 NOTICES "$PKG/usr/share/doc/el-grande/copyright"
 cat >"$PKG/DEBIAN/control" <<EOF
 Package: el-grande
 Version: $VERS
