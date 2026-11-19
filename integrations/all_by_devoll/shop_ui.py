@@ -10,6 +10,7 @@ from decimal import Decimal
 from urllib.parse import urlencode
 
 import mavis_theme
+import dashboard_overview
 import job_reports
 import customer_payments
 from datetime import date
@@ -274,12 +275,37 @@ def render(rows,catalog,db,amounts,system=None):
         ("mobility","Where is it?","At shop, mobile, roadside"),
         ("problem","Customer's request","Brief job description")))
     catalogue=''.join('<li><b>'+esc(p["supplier"])+' · '+esc(p["sku"])+'</b> — '+esc(p["description"])+' · $'+esc(p["unit_cost"])+'</li>' for p in catalog)
-    html_top='''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#c90028"><title>All by Devoll | Shop Desk</title><style>'''+CSS+'''</style></head><body>
-<header><div class="wrap"><div class="brand"><div class="mark">AD</div><div><strong>ALL BY DEVOLL</strong><small>Mobile repair & service · Shop desk</small></div></div>
-<div class="topmeta">Office workspace <a href="/health">System status</a></div></div></header>
-<nav><div class="wrap"><a href="#jobs">Jobs</a><a href="#new">New request</a><a href="#catalogue">Parts</a><a href="/bank">Money &amp; banks</a><a href="/settings">Settings</a><a href="/export.csv">Export jobs</a><a href="/payments.csv">Export payments</a></div></nav><main>
-<div class="intro"><div><p class="eyebrow">Workshop overview</p><h1>Today's job desk</h1><p class="muted">Service requests, estimates and completed jobs in one place.</p></div><a class="action" href="#new">+ New service request</a></div>
+    html_top='''<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#e09915"><title>El Grande | All by Devoll</title>
+<style>'''+CSS+'''</style></head><body><div class="dashboard-layout">
+<aside class="sidebar">
+<a href="#dashboard" class="sidebar-brand" aria-label="Tomey General Company LLC">
+<img src="/brand/tomey.png" alt="Tomey General Company LLC logo"></a>
+<div class="sidebar-links">
+<a href="#dashboard">⌂ &nbsp;Dashboard</a>
+<a href="#jobs">⚒ &nbsp;Jobs</a>
+<a href="#jobs">♙ &nbsp;Customers</a>
+<a href="#jobs">▤ &nbsp;Invoices</a>
+<a href="/bank">$ &nbsp;Money &amp; Banks</a>
+<a href="/bank#cash-count">▣ &nbsp;Safe Count</a>
+<a href="/payments.csv">▥ &nbsp;Reports</a>
+<a href="/settings">⚙ &nbsp;Settings</a>
+</div>
+<div class="sidebar-bottom"><strong>● System status</strong><div>El Grande v0.13.0</div>
+<a href="/health">View connection status</a></div>
+</aside>
+<div class="dashboard-workspace">
+<div class="dashboard-header">
+<div class="dashboard-title"><span class="separator"></span>
+<div><strong>EL GRANDE</strong><small>All by Devoll Operations System · Job, Invoicing, and Financial Control</small></div></div>
+<div class="dashboard-company"><div><strong>All by Devoll, LLC</strong><small>A Tomey General Company</small></div>
+<div class="brand-mark-devoll"><img src="/brand/devoll.png" alt="All by Devoll, LLC logo"></div></div>
+</div><hr class="dashboard-header-rule">
+<main class="dashboard-main">
 '''
+    content=dashboard_overview.render(rows,db,amounts)
+    content+='<div class="dashboard-jobdesk">'
     content='<div class="cards">'+stats+'</div>'
     content+='<section class="panel" id="jobs"><div class="panelhead"><h2>Service jobs</h2><span class="muted small">'+str(len(rows))+' shown · Most recent first</span></div>'+''.join(items)+'</section>'
     content+='<section class="panel" id="new"><div class="panelhead"><h2>New service request</h2><span class="muted small">Phone calls and walk-ins</span></div><form method="post" action="/ticket/new"><div class="fields">'+newfields+'</div><div class="footactions">'+button("Create job")+'</div></form></section>'
@@ -290,4 +316,4 @@ def render(rows,catalog,db,amounts,system=None):
     content+='<details class="inner"><summary>Import supplier prices (CSV)</summary><form method="post" action="/parts/import"><label>Paste catalogue CSV<textarea name="catalog"></textarea></label>'+button("Import prices")+'</form></details>'
     content+=postform('/parts/fetch',"Refresh connected supplier feeds","action secondary")+'</section>'
 
-    return html_top+content+'</main><footer><div class="wrap">All by Devoll · Internal office system</div></footer></body></html>'
+    return html_top+content+'</div></main></div></div></body></html>'
