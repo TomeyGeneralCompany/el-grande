@@ -261,6 +261,8 @@ def page_shell(content):
 <a href="/#dashboard">⌂ &nbsp;Dashboard</a>
 <a href="/#jobs">⚒ &nbsp;Jobs</a>
 <a href="/#calendar">▦ &nbsp;Calendar</a>
+<a href="/inventory">Inventory</a>
+<a href="/purchases">Purchase orders</a>
 <a href="/#jobs">♙ &nbsp;Customers</a>
 <a href="/#jobs">▤ &nbsp;Invoices</a>
 <a href="/bank">$ &nbsp;Money &amp; Banks</a>
