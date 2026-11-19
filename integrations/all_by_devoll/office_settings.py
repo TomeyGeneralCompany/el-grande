@@ -129,6 +129,8 @@ def local_erp_running():
     except (OSError,ValueError):return False
 
 def page(settings,status):
+    import bank_connect
+    provider_configured,provider_environment=bank_connect.ready()
     escape=lambda v:html.escape(str(v or ""),quote=True)
     status_text={
         "saved":"Gmail connection settings saved.",
@@ -136,6 +138,7 @@ def page(settings,status):
         "failed":"Gmail login could not be verified.",
         "bank-saved":"Bank information saved.",
         "bank-failed":"Bank information could not be saved. Check the accounting bank code.",
+        "plaid-saved":"Bank connection provider is configured.",
     }.get(status,"")
     connected=(settings.get("ABD_BLUESEER_CONNECTED")=="yes" and local_erp_running())
     erp_caption=("BlueSeer connected" if connected else
@@ -159,7 +162,7 @@ main{max-width:800px;margin:26px auto;padding:0 20px}a{color:#176961}
 h1{font-size:25px}h2{font-size:19px;margin:0}
 section{background:white;border:1px solid #dce6e2;border-radius:14px;padding:25px;margin:17px 0}
 label{display:block;font-weight:600;font-size:13px;margin:14px 0 5px}
-input{display:block;width:100%;border:1px solid #cbd8d5;border-radius:8px;padding:11px;font:inherit}
+select{display:block;width:100%;padding:11px;border:1px solid #cbd8d5;border-radius:8px}input{display:block;width:100%;border:1px solid #cbd8d5;border-radius:8px;padding:11px;font:inherit}
 button{background:#176961;color:white;border:0;border-radius:8px;padding:11px 17px;cursor:pointer;font-weight:700;margin-top:16px}
 .muted{color:#647876}.notice{padding:12px;background:#e5f1ed;border-radius:8px}
 p{line-height:1.6}.details{margin-top:10px}.details summary{cursor:pointer;padding:12px 16px;background:#176961;
@@ -195,6 +198,21 @@ border-radius:9px;color:white;font-weight:700;list-style:none;display:inline-blo
 </details>
 <p class="hint">No routing number or online banking password is required. This saves the bank account identity for office records; it is not an online bank sign-in.</p>
 <button type="submit">Save bank account</button></form></details></section>
+<section><h2>Connect to your bank</h2>
+<p class="muted">Link an actual financial institution, view balances, and import money in and out. Existing manual cashbook entries remain available.</p>
+"""+('<p><strong>Bank provider configured ('+escape(provider_environment)+')</strong></p>' if provider_configured else "")+"""
+<details class="details"><summary>"""+("Edit connection" if provider_configured else "Set up bank connection")+"""</summary>
+<form method="post" action="/bank/provider-settings">
+<label>Plaid client ID<input name="client_id" type="text" autocomplete="off" placeholder="Provided by Plaid" maxlength="128"></label>
+<label>Plaid secret<input name="secret" type="password" autocomplete="new-password" maxlength="256" placeholder=""""+("Saved — leave blank to keep" if provider_configured else "Plaid secret")+""""></label>
+<label>Connection environment<select name="environment">
+<option value="sandbox""""+(' selected' if provider_environment=="sandbox" else "")+""">Sandbox (testing)</option>
+<option value="development""""+(' selected' if provider_environment=="development" else "")+""">Development</option>
+<option value="production""""+(' selected' if provider_environment=="production" else "")+""">Production (real banks)</option>
+</select></label><p class="hint">This connector needs a Plaid developer account. The bank password is entered only in the bank's authorization flow, never here.</p>
+<button type="submit">Save provider connection</button></form></details>
+<p><a href="/bank">Open money ledger and bank connections</a></p>
+</section>
 <section><h2>Accounting</h2>
 <p><strong>"""+escape(erp_caption)+"""</strong></p>
 <p class="muted">Invoices and recorded payments synchronize with the bundled BlueSeer accounting engine automatically. No terminal setup is required for routine use.</p>
