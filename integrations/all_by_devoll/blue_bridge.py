@@ -45,7 +45,13 @@ def line(item,description,unit_price,quantity=1):
     return item,description[:240],price,qty
 
 def header_data(ticket,amounts):
-    key=f"ABD{int(ticket['id']):06d}"
+    # BlueSeer parses native quote/service-order numbers as integers.
+    # Customer codes are string IDs, but native order references must be
+    # numeric. Use a deterministic high range to avoid normal sequences.
+    ticket_id=int(ticket["id"])
+    if not 0<ticket_id<100000000:
+        raise BridgeError("Ticket number outside reserved native ERP range")
+    key=str(900000000+ticket_id)
     today=date.today().isoformat()
     cust=ticket["blue_customer"] if "blue_customer" in ticket.keys() and ticket["blue_customer"] else os.getenv("ABD_BLUESEER_CUSTOMER","")
     if not cust:raise BridgeError("Assign or create a BlueSeer customer before synchronization")
@@ -135,7 +141,7 @@ def sales_lines(ticket,math):
 def build_payloads(ticket,math):
     """Build native Java-record-compatible JSON for the 8.0 endpoints."""
     key,today,cust,site=header_data(ticket,math)
-    remarks=(f"INTERNAL ESTIMATE ONLY - DO NOT SEND. {key}. "
+    remarks=(f"INTERNAL ESTIMATE ONLY - DO NOT SEND. ABD{int(ticket['id']):06d}. "
              f"{ticket['machine']}. {ticket['problem']}")[:255]
     currency=os.getenv("ABD_BLUESEER_CURRENCY","USD")
     service_type=os.getenv("ABD_BLUESEER_SERVICE_TYPE","order")
