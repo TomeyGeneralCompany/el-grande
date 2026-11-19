@@ -20,4 +20,4 @@ bash packaging/smoke-standalone.sh
 
 ## License
 
-The current El Grande release is available under the [MIT License](LICENSE). Historical BlueSeer versions retain the notices in their respective commits.
+El Grande is proprietary to Tomey General Company, LLC. See the [copyright notice](LICENSE). Historical BlueSeer versions retain the notices in their respective commits.
