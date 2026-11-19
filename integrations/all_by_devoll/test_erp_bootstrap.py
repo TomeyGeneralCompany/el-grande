@@ -14,13 +14,14 @@ class Fixture(unittest.TestCase):
         self.env=Path(self.tmp.name)/"desk.env"
         with sqlite3.connect(self.db) as con:
             for name,column,values in (
-              ("user_mstr","us_userid",("admin",)),
+              ("user_mstr","user_id",("admin",)),
               ("site_mstr","site_site",("1000",)),
               ("ac_mstr","ac_id",("20000000",)),
               ("cust_term","cut_code",("N30",)),
               ("item_mstr","it_item",())):
                 con.execute(f"CREATE TABLE {name} ({column} TEXT PRIMARY KEY)")
                 for value in values:con.execute(f"INSERT INTO {name} VALUES (?)",(value,))
+            con.execute("ALTER TABLE user_mstr ADD COLUMN user_passwd TEXT DEFAULT 'admin'")
             con.execute("""CREATE TABLE usr_meta(
               usrm_id TEXT, usrm_type TEXT, usrm_key TEXT, usrm_value TEXT)""")
     def tearDown(self):self.tmp.cleanup()
@@ -51,6 +52,12 @@ class Fixture(unittest.TestCase):
         self.assertTrue(result["connected"])
         settings=erp_bootstrap.read_env(self.env)
         self.assertEqual(settings["ABD_BLUESEER_USER"],"admin")
+        self.assertNotEqual(settings["ABD_BLUESEER_PASSWORD"],"admin")
+        self.assertEqual(sessions[0].password,settings["ABD_BLUESEER_PASSWORD"])
+        with sqlite3.connect(self.db) as con:
+            encoded=con.execute("SELECT user_passwd FROM user_mstr WHERE user_id='admin'").fetchone()[0]
+        self.assertEqual("".join(chr(ord(c)-222) for c in encoded),
+                         settings["ABD_BLUESEER_PASSWORD"])
         self.assertEqual(settings["ABD_BLUESEER_SITE"],"1000")
         self.assertEqual(settings["ABD_BLUESEER_AR_ACCOUNT"],"20000000")
         self.assertEqual(settings["ABD_BLUESEER_LABOR_ITEM"],"ABD-LABOR")
@@ -66,7 +73,9 @@ class Fixture(unittest.TestCase):
             def authenticate(self):raise ValueError("Unauthorized")
         with self.assertRaises(ValueError):
             erp_bootstrap.configure(self.db,self.env,NoAuth)
-        self.assertEqual(self.env.read_text(),before)
+        # The generated native credential is durable even if the API is down.
+        self.assertIn("ABD_IMAP_USER=allbydevoll@gmail.com",self.env.read_text())
+        self.assertIn("ABD_BLUESEER_PASSWORD=",self.env.read_text())
     def test_no_silent_live_invoices(self):
         p=erp_bootstrap.service_item_payload("ABD-LABOR","Labor","1000")
         self.assertEqual(p["it_type"],"S")
