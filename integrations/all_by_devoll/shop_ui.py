@@ -189,22 +189,19 @@ def render(rows,catalog,db,amounts,system=None):
                     ('<pre class="ai">'+esc(ticket["ai_notes"])+'</pre>' if ticket["ai_notes"] else '')+'</div></section>')
             inner.append('<div class="working">'+left+right+'</div>')
             completedform=('<section class="worksection" id="finish-'+str(n)+'"><h3>Finish this job</h3>'
-              '<p class="muted">Record the work performed and the actual bill when the job is finished.</p>'
+              '<p class="muted">Enter the completed work and the final price. El Grande will prepare the PDF invoice.</p>'
               '<form method="post" action="/ticket/'+str(n)+'/complete">'
-              '<label>Work performed<textarea name="work_performed" required placeholder="Repairs completed, parts installed, tests performed">'+esc(ticket["notes"])+'</textarea></label>'
-              '<div class="fields">'+field("started_at","Started",kind="datetime-local")+
-              field("finished_at","Finished",kind="datetime-local")+
-              field("actual_hours","Hours worked",ticket["labor_hours"],"number",step=".01")+
-              field("actual_labor_cost","Actual labor cost ($)","0","number",step=".01")+
-              field("actual_parts_cost","Actual parts cost ($)",ticket["parts_cost"],"number",step=".01")+
-              field("actual_other_cost","Other expenses ($)","0","number",step=".01")+
-              field("actual_invoice","Final customer bill ($)",f'{a["total"]:.2f}',"number",required=True,step=".01")+
-              '</div><h3>Customer paid now? (optional)</h3>'
-              '<p class="small muted">If unpaid, leave the amount blank. Cash is the default.</p>'
-              '<div class="fields">'+field("amount_received","Cash handed over ($)","", "number",step=".01")+
-              field("paid_on","Payment date",date.today().isoformat(),"date")+
-              '</div><input type="hidden" name="method" value="cash">'
-              '<div class="footactions">'+button("Save completed job","action danger")+'</div></form></section>')
+              '<label>Work performed<textarea name="work_performed" required placeholder="Repair completed, parts installed, work performed">'+esc(ticket["notes"])+'</textarea></label>'
+              +field("actual_invoice","Final customer bill ($)",format(a["total"],".2f"),"number",required=True,step=".01")
+              +'<details class="inner"><summary>Optional: hours and actual job expenses</summary><div class="fields">'
+              +field("started_at","Started",kind="datetime-local")
+              +field("finished_at","Finished",kind="datetime-local")
+              +field("actual_hours","Hours worked",ticket["labor_hours"],"number",step=".01")
+              +field("actual_labor_cost","Actual labor cost ($)","0","number",step=".01")
+              +field("actual_parts_cost","Actual parts cost ($)",ticket["parts_cost"],"number",step=".01")
+              +field("actual_other_cost","Other expenses ($)","0","number",step=".01")
+              +'</div></details>'
+              +'<div class="footactions">'+button("Finish Job & Create Invoice","action danger")+'</div></form></section>')
             inner.append(completedform)
             native_html='<details class="inner"><summary>BlueSeer accounting</summary>'
             if sync:
