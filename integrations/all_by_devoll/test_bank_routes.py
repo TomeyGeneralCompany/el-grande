@@ -80,6 +80,13 @@ class BankRoutesTests(unittest.TestCase):
             status,_=self.post("/bank/exchange",{"public_token":"public-token"})
         self.assertEqual(status,200)
         self.assertEqual(bridge.call_args.args[0],"public-token")
+    def test_company_logos_served_from_local_app(self):
+        for name in ("tomey.png","devoll.png"):
+            with urlopen(self.url("/brand/"+name),timeout=5) as response:
+                self.assertEqual(response.status,200)
+                self.assertEqual(response.headers["Content-Type"],"image/png")
+                self.assertTrue(response.read().startswith(b"\x89PNG\r\n\x1a\n"))
+
     def test_settings_link_is_present(self):
         status,screen=self.get("/settings")
         self.assertEqual(status,200)
