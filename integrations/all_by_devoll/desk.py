@@ -752,6 +752,9 @@ class Handler(BaseHTTPRequestHandler):
             if path=="/bank/sync":
                 with db() as con:bank_connect.sync(con)
                 return self.redirect("/bank?status=synced")
+            if path=="/bank/cash-count":
+                with db() as con:bank_ledger.record_cash_count(con,data)
+                return self.redirect("/bank?status=counted")
             if path=="/bank/entry":
                 with db() as con:bank_ledger.record(con,data)
                 return self.redirect("/bank?status=recorded")
