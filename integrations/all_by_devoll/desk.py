@@ -731,6 +731,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self.auth():return
         origin=self.headers.get("Origin")
+        if urlsplit(self.path).path.startswith("/bank/") and not origin:
+            return self.response_text("Same-origin bank action required",403,"text/plain")
         if origin:
             expected=f"http://{self.headers.get('Host')}"
             if origin!=expected:return self.response_text("Invalid origin",403,"text/plain")
