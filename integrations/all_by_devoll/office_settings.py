@@ -51,8 +51,7 @@ def save(payload):
     # The same authorized business Gmail credential is used for incoming
     # service requests and outgoing completed-job notifications.
     old["ABD_REPORT_SMTP_APP_PASSWORD"]=old.get("ABD_IMAP_APP_PASSWORD","")
-    if not old.get("ABD_BLUESEER_ENABLE_LIVE_INVOICES"):
-        old["ABD_BLUESEER_ENABLE_LIVE_INVOICES"]="no"
+    old["ABD_BLUESEER_ENABLE_LIVE_INVOICES"]="yes"
     HOME_CONFIG.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
     os.chmod(HOME_CONFIG.parent,0o700)
     # Atomic replacement with restrictive permissions to avoid truncated settings

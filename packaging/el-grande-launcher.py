@@ -78,7 +78,7 @@ def ensure_first_run_defaults():
         "ABD_IMAP_USER":"allbydevoll@gmail.com",
         "ABD_IMAP_APP_PASSWORD":"",
         "ABD_BLUESEER_URL":"http://127.0.0.1:8088/bsapi",
-        "ABD_BLUESEER_ENABLE_LIVE_INVOICES":"no",
+        "ABD_BLUESEER_ENABLE_LIVE_INVOICES":"yes",
         "ABD_DB":str(DATA / "data" / "tickets.sqlite3"),
         "ABD_BIND":"127.0.0.1",
         "ABD_DASHBOARD_PASSWORD":""
@@ -247,7 +247,7 @@ def configure():
             messagebox.showerror("Email","Enter a valid owner report address.")
             notebook.select(general)
             return
-        vals["ABD_BLUESEER_ENABLE_LIVE_INVOICES"]="no"
+        vals["ABD_BLUESEER_ENABLE_LIVE_INVOICES"]="yes"
         vals["ABD_BIND"]="127.0.0.1"
         vals["ABD_DASHBOARD_PASSWORD"]=""
         vals["ABD_DB"]=str(DATA/"data"/"tickets.sqlite3")

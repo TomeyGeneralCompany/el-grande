@@ -52,15 +52,23 @@ def main():
     assert quote_second[1]=="exists"
     assert order_second[1]=="exists"
     print("Native ERP integration PASS: customer, internal quote, service order, idempotent reads.")
-    # One controlled native AR/GL transaction in a throwaway database.
-    # The real office installer keeps live invoice posting disabled.
+    # A second test job is finalized at a DIFFERENT amount from its estimate.
+    # Production invoices must match the actual bill, never the draft quote.
     import invoice_bridge
-    os.environ["ABD_BLUESEER_ENABLE_LIVE_INVOICES"]="yes"
-    ticket["finalized_at"]="2026-11-18T12:00:00Z"
-    final_math={**total,"basis":total["total"]}
+    complete=dict(ticket,id=950001,blue_customer="",blue_ship_to="",
+                  finalized_at="2026-11-18T12:00:00Z")
+    final_math={"labor":Decimal("170"),"total":Decimal("310"),
+                "basis":Decimal("375.25")}
+    cust,_=customer_bridge.upsert_customer(complete,client)
+    complete["blue_customer"]=cust
+    complete["blue_ship_to"]=cust
+    native,kind=blue_bridge.submit_service_order(complete,final_math,client)
+    assert native=="900950001" and kind=="created"
+    assert blue_bridge.submit_service_order(complete,final_math,client)[1]=="exists"
     shipper=invoice_bridge.reserve_native_shipment_number(client)
-    invoice_bridge.post_native_invoice(ticket,final_math,shipper,client)
-    print("Native ERP disposable invoice confirmed:",shipper)
-    os.environ["ABD_BLUESEER_ENABLE_LIVE_INVOICES"]="no"
+    invoice_bridge.post_native_invoice(complete,final_math,shipper,client)
+    print("Native ERP disposable final-bill invoice confirmed:",shipper,
+          "amount",str(final_math["basis"]))
+
 
 if __name__=="__main__":main()

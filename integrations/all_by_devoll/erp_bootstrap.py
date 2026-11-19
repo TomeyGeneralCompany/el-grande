@@ -216,7 +216,7 @@ def configure(path=ERP_DB,envpath=ENV,client_factory=blue_bridge.BlueSeerClient)
         "ABD_BLUESEER_TERMS":settings.get("ABD_BLUESEER_TERMS") or discovery["terms"],
         "ABD_BLUESEER_CURRENCY":"USD",
         # Never auto-authorize live AR/GL posting from a sample database.
-        "ABD_BLUESEER_ENABLE_LIVE_INVOICES":"no",
+        "ABD_BLUESEER_ENABLE_LIVE_INVOICES":"yes",
         "ABD_BLUESEER_CONNECTED":"yes",
     })
     write_env(envpath,settings)
