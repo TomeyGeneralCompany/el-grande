@@ -35,8 +35,14 @@ def main():
     quote,quote_result=blue_bridge.submit_internal_quote(ticket,total,client)
     order,order_result=blue_bridge.submit_service_order(ticket,total,client)
     assert quote=="ABD950000" and order=="ABD950000"
-    assert blue_bridge.submit_internal_quote(ticket,total,client)[1]=="exists"
-    assert blue_bridge.submit_service_order(ticket,total,client)[1]=="exists"
+    quote_second=blue_bridge.submit_internal_quote(ticket,total,client)
+    order_second=blue_bridge.submit_service_order(ticket,total,client)
+    print("Native quote first/second:",quote_result,quote_second[1])
+    print("Native service order first/second:",order_result,order_second[1])
+    print("Native quote response:",str(client.get("dataServORD","getQuoteMstr",quote))[:300])
+    print("Native order response:",str(client.get("dataServORD","getServiceOrderMstr",order))[:300])
+    assert quote_second[1]=="exists"
+    assert order_second[1]=="exists"
     print("Native ERP integration PASS: customer, internal quote, service order, idempotent reads.")
     print("No invoices or GL entries were posted.")
 
