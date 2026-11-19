@@ -2,7 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT="$PWD"
-VERS="${1:-0.12.0}"
+VERS="${1:-0.13.0}"
 OUT="$ROOT/artifacts"
 PKG="$ROOT/build/el-grande-package"
 rm -rf "$PKG"
@@ -10,6 +10,8 @@ mkdir -p "$PKG/DEBIAN" "$PKG/opt/el-grande/integrations/all_by_devoll" \
     "$PKG/opt/el-grande/packaging" "$PKG/opt/el-grande/java" \
     "$PKG/usr/share/applications" "$PKG/usr/lib/systemd/user" "$OUT"
 cp -a integrations/all_by_devoll/*.py "$PKG/opt/el-grande/integrations/all_by_devoll/"
+mkdir -p "$PKG/opt/el-grande/integrations/all_by_devoll/brand"
+cp -a integrations/all_by_devoll/brand/*.png "$PKG/opt/el-grande/integrations/all_by_devoll/brand/"
 cp -a packaging/el-grande-launcher.py "$PKG/opt/el-grande/packaging/"
 cp -a packaging/el-grande.desktop "$PKG/usr/share/applications/"
 cp -a packaging/el-grande-*.service "$PKG/usr/lib/systemd/user/"
