@@ -67,7 +67,7 @@ class Fixture(unittest.TestCase):
         self.assertEqual(settings["ABD_BLUESEER_AR_ACCOUNT"],"20000000")
         self.assertEqual(settings["ABD_BLUESEER_LABOR_ITEM"],"ABD-LABOR")
         self.assertEqual(settings["ABD_BLUESEER_PARTS_ITEM"],"ABD-PARTS")
-        self.assertEqual(settings["ABD_BLUESEER_ENABLE_LIVE_INVOICES"],"no")
+        self.assertEqual(settings["ABD_BLUESEER_ENABLE_LIVE_INVOICES"],"yes")
         self.assertEqual(self.env.stat().st_mode & 0o777,0o600)
         self.assertEqual(len(sessions[0].items),4)
         self.assertEqual(sessions[0].site["site_desc"],"All by Devoll")
