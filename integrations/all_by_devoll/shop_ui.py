@@ -33,7 +33,7 @@ main{max-width:1240px;margin:30px auto 80px;padding:0 24px}
 h1{font-size:29px;line-height:1.18;margin:0 0 7px;letter-spacing:-.03em}
 h2{font-size:20px;letter-spacing:-.02em;margin:0}h3{font-size:16px;margin:0 0 12px}
 .intro{display:flex;justify-content:space-between;align-items:center;gap:15px;margin-bottom:24px}.muted{color:var(--muted)}.intro p{margin:0}
-.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:24px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:14px;margin-bottom:24px}
 .metric{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 19px}
 .metric label{margin:0;color:var(--muted);font-size:12px}.metric strong{display:block;font-size:27px;letter-spacing:-.04em;margin-top:5px}
 .panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:22px;margin:18px 0}
@@ -121,7 +121,13 @@ def render(rows,catalog,db,amounts,system=None):
     new=counts["new"]
     config={"mailbox":system.get("mailbox",False),"report":system.get("report",False)}
     erp=system.get("erp",{"running":False,"configured":False})
-    metrics=[("Open jobs",pending),("New requests",new),("Active work",inprogress),("Completed jobs",complete)]
+    with db() as con:
+        today_cash=con.execute("""SELECT applied FROM customer_payments
+            WHERE method='cash' AND paid_on=? AND voided_at IS NULL""",
+            (date.today().isoformat(),)).fetchall()
+    daily_cash=sum((Decimal(x["applied"]) for x in today_cash),Decimal("0"))
+    metrics=[("Open jobs",pending),("New requests",new),("Active work",inprogress),
+             ("Completed jobs",complete),("Cash received today","$"+format(daily_cash,",.2f"))]
     stats=''.join('<div class="metric"><label>'+name+'</label><strong>'+str(value)+'</strong></div>' for name,value in metrics)
     items=[]
     for ticket in rows:
