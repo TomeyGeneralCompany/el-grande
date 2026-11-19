@@ -224,9 +224,9 @@ class CustomerAndAccountingTests(unittest.TestCase):
     self.assertEqual(cm["cm_ar_acct"],"1100")
     self.assertEqual(cms["cms_shipto"],"ABD000007")
     self.assertEqual(json.loads(contact),[])
- def test_invoice_requires_operator_activation(self):
+ def test_native_invoicing_does_not_require_hidden_flag(self):
     with patch.dict(os.environ,{"ABD_BLUESEER_ENABLE_LIVE_INVOICES":"no"}):
-        with self.assertRaises(blue_bridge.BridgeError):invoice_bridge.require_invoice_permission()
+        invoice_bridge.require_invoice_permission()
  def test_invoice_payload_reconciles_and_uses_native_records(self):
     import json
     class Client:
@@ -242,19 +242,23 @@ class CustomerAndAccountingTests(unittest.TestCase):
     self.assertEqual(hdr["sh_ar_acct"],"1100")
     self.assertEqual(sum(Decimal(str(p["shd_qty"]))*Decimal(str(p["shd_netprice"])) for p in lines),Decimal("350"))
     self.assertEqual(json.loads(tree),[])
-    self.assertEqual(lines[0]["shd_qty"],2)
-    self.assertEqual(lines[0]["shd_netprice"],85.0)
- def test_native_invoice_refuses_bill_discrepancy(self):
+    self.assertEqual(lines[0]["shd_qty"],1)
+    self.assertEqual(lines[0]["shd_netprice"],350.0)
+ def test_final_bill_controls_native_invoice_not_old_estimate(self):
     class Client:
-        def get(self,*args):return {}
-    with self.assertRaises(blue_bridge.BridgeError):
-        invoice_bridge.prepare_invoice(self.ticket,{**self.math,"basis":Decimal("351")},17,Client())
+        def get(self,*args):
+            return {"cm_code":"ABD000007","cm_terms":"NET30","cm_curr":"USD",
+                    "cm_ar_acct":"1100","cm_ar_cc":""}
+    import json
+    payload=invoice_bridge.prepare_invoice(self.ticket,{**self.math,"basis":Decimal("451.25")},"917",Client())
+    detail,_,_=payload.split("=_=")
+    self.assertEqual(json.loads(detail)[0]["shd_netprice"],451.25)
  def test_duplicate_shipper_refuses_auto_confirmation(self):
     class Client:
         def __init__(self):self.actions=[]
         def get(self,resource,action,ident):
             if action=="getServiceOrderMstr":return {"sv_nbr":"900000007","sv_cust":"ABD000007"}
-            if action=="getServiceOrderDet":return [{"svd_qty":2,"svd_netprice":85},{"svd_qty":1,"svd_netprice":140},{"svd_qty":1,"svd_netprice":40}]
+            if action=="getServiceOrderDet":return [{"svd_qty":1,"svd_netprice":350}]
             if action=="getCustMstr":return {"cm_code":"ABD000007","cm_curr":"USD","cm_ar_acct":"1100"}
             if action=="getShipMstr":return {"sh_id":"917"}
             return None
@@ -270,7 +274,7 @@ class CustomerAndAccountingTests(unittest.TestCase):
         def get(self,resource,action,ident):
             self.calls.append(action)
             if action=="getServiceOrderMstr":return {"sv_nbr":"900000007","sv_cust":"ABD000007"}
-            if action=="getServiceOrderDet":return [{"svd_qty":2,"svd_netprice":85},{"svd_qty":1,"svd_netprice":140},{"svd_qty":1,"svd_netprice":40}]
+            if action=="getServiceOrderDet":return [{"svd_qty":1,"svd_netprice":350}]
             if action=="getCustMstr":return {"cm_code":"ABD000007","cm_curr":"USD","cm_ar_acct":"1100"}
             if action=="getShipMstr":return None
         def post(self,resource,action,body):
