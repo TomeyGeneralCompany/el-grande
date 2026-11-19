@@ -37,7 +37,7 @@ class ShopUITests(unittest.TestCase):
         for label in ('name="labor_hours"','name="parts_cost"','name="work_performed"',
                       'name="actual_labor_cost"','name="actual_parts_cost"',
                       'name="actual_hours"','name="actual_invoice"',
-                      "Save estimate","Save completed job","Create service order"):
+                      "Save estimate","Finish Job & Create Invoice","Create service order"):
             self.assertIn(label,page)
         self.assertIn("www.google.com/search",page)
         self.assertIn("Detroit Axle",page)
