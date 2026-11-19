@@ -67,7 +67,7 @@ def ensure_first_run_defaults():
     })
 
 def try_dashboard(settings):
-    request = urllib.request.Request(URL + "ready")
+    request = urllib.request.Request(URL + "/ready")
     password = settings.get("ABD_DASHBOARD_PASSWORD")
     if password:
         token = base64.b64encode(("operator:" + password).encode("utf-8")).decode("ascii")
@@ -97,7 +97,7 @@ def open_dashboard():
             return
     for _ in range(40):
         if try_dashboard(settings):
-            webbrowser.open(URL + ("settings" if "--setup" in sys.argv else ""))
+            webbrowser.open(URL + ("/settings" if "--setup" in sys.argv else ""))
             return
         time.sleep(0.25)
     messagebox.showerror("El Grande startup", "The shop is not ready. See the El Grande desk service log for startup details.")
