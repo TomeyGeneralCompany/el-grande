@@ -1,5 +1,6 @@
 """Self-contained local money register page; native HTML, no frontend build."""
 import html
+import mavis_theme
 import bank_ledger
 from datetime import date
 from decimal import Decimal
@@ -40,6 +41,7 @@ table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:9px;bord
 <h1>Money in &amp; out</h1>
 <p><a href="/bank/export.csv">Download full money ledger (CSV)</a></p>
 <p class="muted">Record customer receipts, expenses and deposits without terminal commands. Your local register works even if no bank is connected.</p>''']
+    content[0]=content[0].replace("</style>","</style><style>"+mavis_theme.CSS+"</style>")
     if message:content.append('<p class="notice">'+e(message)+'</p>')
     content.append('<div class="cards">')
     for a in rows:

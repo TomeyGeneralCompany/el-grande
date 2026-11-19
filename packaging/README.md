@@ -164,3 +164,10 @@ In the existing **Money & banks** dashboard, use **Count cash in the safe**. Sel
 A surplus or shortage does not silently overwrite the cash register, change an invoice, generate a payment, alter the owner's 15% gross entitlement, or modify BlueSeer. If a discrepancy exists, the mechanic can investigate and use the existing dated Money in / Money out actions for a justified correction, leaving both the count and subsequent record as evidence.
 
 The feature runs entirely offline and works before a business bank account exists; it adds no Gmail or banking prerequisite. It does not change the job desk's interface design beyond the new section. Version 0.11.0 remains the Zorin/Ubuntu installer; the Windows installation workflow and wider dashboard styling are separate follow-on stages.
+
+
+## El Grande 0.12.0 — MAVIS control-room design
+
+The entire browser-based El Grande application now uses the supplied MAVIS screenshot as its visual reference. The job dashboard, Settings (Gmail and banking), Money & Banks (including safe counts), and Plaid bank connection page share one reusable `mavis_theme.py` stylesheet. It uses the saturated deep-red background/header, bright teal cards, white type, lightly rounded panels, roomy card spacing, prominent round brand mark, and simple white-lined tables of the reference. Form controls, badges, navigation, expanded tickets and payment sections are styled consistently, with accessible focus indicators and responsive narrow-screen layouts.
+
+This is a **presentation-only release**. It preserves the existing routes, data entry, native BlueSeer accounting, customer payments, bank ledger, safe reconciliation and Tomey General's off-the-top share. It does not send a job or financial record anywhere, configure Gmail, or initiate banking activity. It is still built as a Zorin/Ubuntu installer; the later Windows packaging remains a separate planned task.

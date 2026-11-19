@@ -15,6 +15,7 @@ from datetime import datetime,timezone
 from pathlib import Path
 from decimal import Decimal
 import bank_ledger
+import mavis_theme
 
 DIRECTORIES={"sandbox":"https://sandbox.plaid.com",
              "development":"https://development.plaid.com",
@@ -161,7 +162,7 @@ def connection_page(token,nonce):
     # rendered. Plaid Link performs actual institution authentication.
     import html
     token_js=json.dumps(token).replace("<","\\u003c")
-    return """<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Connect a bank | El Grande</title></head>
+    connection_html = """<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Connect a bank | El Grande</title></head>
 <body style="font:16px system-ui;max-width:600px;margin:50px auto;padding:20px">
 <a href="/bank">Back to Money</a><h1>Connect your bank</h1>
 <p>Choose your institution and sign in through Plaid's secure bank connection. El Grande never receives your bank password.</p>
@@ -184,3 +185,4 @@ const handler=Plaid.create({
 });
 document.getElementById("connect").addEventListener("click",()=>handler.open());
 </script></body></html>"""
+    return connection_html.replace("</head>","<style>"+mavis_theme.CSS+"</style></head>")
