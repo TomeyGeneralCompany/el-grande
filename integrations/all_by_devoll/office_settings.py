@@ -131,6 +131,8 @@ def local_erp_running():
 def page(settings,status):
     import bank_connect
     provider_configured,provider_environment=bank_connect.ready()
+    provider_options="".join('<option value="'+key+'"'+(' selected' if provider_environment==key else '')+'>'+label+'</option>' for key,label in (
+       ("sandbox","Sandbox (testing)"),("development","Development"),("production","Production (real banks)")))
     escape=lambda v:html.escape(str(v or ""),quote=True)
     status_text={
         "saved":"Gmail connection settings saved.",
@@ -206,9 +208,7 @@ border-radius:9px;color:white;font-weight:700;list-style:none;display:inline-blo
 <label>Plaid client ID<input name="client_id" type="text" autocomplete="off" placeholder="Provided by Plaid" maxlength="128"></label>
 <label>Plaid secret<input name="secret" type="password" autocomplete="new-password" maxlength="256" placeholder="Enter secret, or leave blank to keep it"></label>
 <label>Connection environment<select name="environment">
-<option value="sandbox">Sandbox (testing)</option>
-<option value="development">Development</option>
-<option value="production">Production (real banks)</option>
+"""+provider_options+"""
 </select></label><p class="hint">This connector needs a Plaid developer account. The bank password is entered only in the bank's authorization flow, never here.</p>
 <button type="submit">Save provider connection</button></form></details>
 <p><a href="/bank">Open money ledger and bank connections</a></p>
