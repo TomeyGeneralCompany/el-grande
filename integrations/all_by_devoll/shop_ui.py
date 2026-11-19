@@ -12,6 +12,7 @@ from urllib.parse import urlencode
 import mavis_theme
 import dashboard_overview
 import job_reports
+import job_calendar
 import customer_payments
 from datetime import date
 
@@ -81,7 +82,7 @@ footer{border-top:1px solid var(--line);padding:20px 0;color:var(--muted);font-s
 nav .wrap{gap:18px}.jobbody{padding:0 12px 14px}}
 """
 
-CSS += mavis_theme.CSS
+CSS += mavis_theme.CSS + job_calendar.CSS
 
 def field(name, title, value="",kind="text",required=False,placeholder="",step=None):
     stepattr= ' step="'+esc(step)+'"' if step else ""
@@ -116,7 +117,7 @@ def connection_status(config,erp):
         '<div class="status-item"><span class="dot '+col+'"></span>'+esc(text)+'</div>'
         for text,col in (mail,report,erptext))+'</div>'
 
-def render(rows,catalog,db,amounts,system=None):
+def render(rows,catalog,db,amounts,system=None,calendar_month="",edit_appointment=""):
     system=system or {}
     counts=Counter(r["status"] for r in rows)
     pending=sum(1 for r in rows if not r["finalized_at"] and r["status"] not in ("cancelled","paid"))
@@ -285,6 +286,7 @@ def render(rows,catalog,db,amounts,system=None):
 <div class="sidebar-links">
 <a href="#dashboard">⌂ &nbsp;Dashboard</a>
 <a href="#jobs">⚒ &nbsp;Jobs</a>
+<a href="#calendar">▦ &nbsp;Calendar</a>
 <a href="#jobs">♙ &nbsp;Customers</a>
 <a href="#jobs">▤ &nbsp;Invoices</a>
 <a href="/bank">$ &nbsp;Money &amp; Banks</a>
@@ -304,7 +306,7 @@ def render(rows,catalog,db,amounts,system=None):
 </div><hr class="dashboard-header-rule">
 <main class="dashboard-main">
 '''
-    content=dashboard_overview.render(rows,db,amounts)
+    content=dashboard_overview.render(rows,db,amounts,calendar_month,edit_appointment)
     content+='<div class="dashboard-jobdesk">'
     content+='<div class="cards">'+stats+'</div>'
     content+='<section class="panel" id="jobs"><div class="panelhead"><h2>Service jobs</h2><span class="muted small">'+str(len(rows))+' shown · Most recent first</span></div>'+''.join(items)+'</section>'

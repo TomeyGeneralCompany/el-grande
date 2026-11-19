@@ -5,6 +5,7 @@ from decimal import Decimal
 from zoneinfo import ZoneInfo
 import customer_payments
 import bank_ledger
+import job_calendar
 
 def e(x):return html.escape(str(x if x is not None else ""),quote=True)
 def money(value):return "$"+format(Decimal(value),",.2f")
@@ -18,7 +19,7 @@ def pair_rows(rows):
     return '<div class="overview-rows overview-money-grid">'+''.join(
        '<strong>'+e(a)+'</strong><span class="overview-money">'+e(b)+'</span>'
        for a,b in rows)+'</div>'
-def render(rows,db,amounts):
+def render(rows,db,amounts,calendar_month="",edit_appointment=""):
     today=date.today()
     opened=[r for r in rows if not r["finalized_at"] and r["status"]!="cancelled"]
     active=next((r for r in opened if r["status"] in ("in_progress","approved")),None)
@@ -55,12 +56,6 @@ def render(rows,db,amounts):
        ("Invoiced today",money(billed)),("Paid today",money(paid)),
        ("Tomey General (15%)",money(parent)),
        ("Operator (85%)",money(billed-parent))])
-    pending='<p>No open jobs.</p>'
-    if opened:
-        pending='<table><thead><tr><th>Received</th><th>Customer</th><th>Vehicle</th><th>Service</th><th>Status</th></tr></thead><tbody>'
-        for job in opened[:8]:
-            pending+='<tr><td>'+e(local_day(job["received_at"]) or "—")+'</td><td>'+e(job["customer"] or "—")+'</td><td>'+e(job["machine"] or "—")+'</td><td>'+e(job["service"] or job["problem"] or "—")+'</td><td><a href="#ticket-'+str(job["id"])+'">'+e(job["status"].replace("_"," ").title())+'</a></td></tr>'
-        pending+='</tbody></table>'
     financial=pair_rows([("Cash (safe)",money(Decimal(cash)/100)),
        ("Bank (recorded)",money(Decimal(bank)/100)),
        ("Total recorded funds",money(Decimal(cash+bank)/100)),
@@ -84,7 +79,7 @@ def render(rows,db,amounts):
     return ('<div id="dashboard" class="dashboard-overview">'
         '<section class="panel"><h2>Current Job</h2>'+current+'</section>'
         '<section class="panel"><h2>Today at a Glance</h2>'+glance+'</section>'
-        '<section class="panel overview-wide"><h2>Upcoming Jobs</h2>'+pending+'</section>'
+        +job_calendar.render(db,rows,calendar_month,edit_appointment)+
         '<section class="panel"><h2>Financial Summary</h2>'+financial+'</section>'
         '<section class="panel"><h2>Recent Activity</h2>'+recent+'</section>'
         '</div>')
