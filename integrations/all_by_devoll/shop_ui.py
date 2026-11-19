@@ -306,7 +306,7 @@ def render(rows,catalog,db,amounts,system=None):
 '''
     content=dashboard_overview.render(rows,db,amounts)
     content+='<div class="dashboard-jobdesk">'
-    content='<div class="cards">'+stats+'</div>'
+    content+='<div class="cards">'+stats+'</div>'
     content+='<section class="panel" id="jobs"><div class="panelhead"><h2>Service jobs</h2><span class="muted small">'+str(len(rows))+' shown · Most recent first</span></div>'+''.join(items)+'</section>'
     content+='<section class="panel" id="new"><div class="panelhead"><h2>New service request</h2><span class="muted small">Phone calls and walk-ins</span></div><form method="post" action="/ticket/new"><div class="fields">'+newfields+'</div><div class="footactions">'+button("Create job")+'</div></form></section>'
     content+='<section class="panel" id="catalogue"><div class="panelhead"><h2>Parts catalogue</h2><span class="muted small">Supplier reference and price lookup</span></div>'
