@@ -21,10 +21,18 @@ class Fixture(unittest.TestCase):
               ("item_mstr","it_item",())):
                 con.execute(f"CREATE TABLE {name} ({column} TEXT PRIMARY KEY)")
                 for value in values:con.execute(f"INSERT INTO {name} VALUES (?)",(value,))
+            con.execute("""CREATE TABLE usr_meta(
+              usrm_id TEXT, usrm_type TEXT, usrm_key TEXT, usrm_value TEXT)""")
     def tearDown(self):self.tmp.cleanup()
     def test_readonly_detection(self):
         found=erp_bootstrap.discover_database(self.db)
         self.assertEqual(found,{"site":"1000","ar_account":"20000000","terms":"N30"})
+    def test_loopback_acl_is_idempotent(self):
+        self.assertTrue(erp_bootstrap.allow_loopback_api_user(self.db,"admin"))
+        self.assertFalse(erp_bootstrap.allow_loopback_api_user(self.db,"admin"))
+        with sqlite3.connect(self.db) as con:
+            acl=con.execute("SELECT usrm_type,usrm_key,usrm_value FROM usr_meta").fetchall()
+        self.assertEqual(acl,[("ip","admin","127.0.0.1")])
     def test_native_item_bootstrap_and_persist(self):
         sessions=[]
         class FakeClient:
