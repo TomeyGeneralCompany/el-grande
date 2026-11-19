@@ -16,10 +16,11 @@ def path_for(number,root=None):
 def clean(value,limit=700):
     return " ".join(str(value or "").split())[:limit].encode("latin-1","replace").decode("latin-1")
 def render(ticket,completed,out):
-    if not ticket["finalized_at"] or completed is None:
-        raise ValueError("A completed job is required before issuing a PDF")
+    if not ticket["finalized_at"]:
+        raise ValueError("A finalized bill is required before issuing a PDF")
     total=Decimal(str(ticket["bill_total"]))
-    if not total.is_finite() or total<0 or total!=Decimal(str(completed["actual_invoice"])):
+    if not total.is_finite() or total<0 or (completed is not None and
+            total!=Decimal(str(completed["actual_invoice"]))):
         raise ValueError("Customer invoice does not agree with final bill")
     c=canvas.Canvas(str(out),pagesize=letter,pageCompression=1,invariant=1)
     c.setTitle("All by Devoll invoice ABD-%06d"%ticket["id"])
@@ -55,7 +56,9 @@ def render(ticket,completed,out):
     c.setStrokeColor(HexColor("#dbe6e2"));c.line(42,y,width-42,y);y-=31
     c.setFillColor(HexColor("#116a65"));c.setFont("Helvetica-Bold",11)
     c.drawString(43,y,"COMPLETED WORK");y-=28
-    for paragraph in (ticket["service"] or "Repair service",ticket["problem"],completed["work_performed"]):
+    description=(completed["work_performed"] if completed is not None else
+                 ticket["notes"] or "Service as recorded on the job ticket")
+    for paragraph in (ticket["service"] or "Repair service",ticket["problem"],description):
         if not paragraph:continue
         for line in simpleSplit(clean(paragraph,1800),"Helvetica",10,width-100):
             if y<145:c.showPage();y=height-65
