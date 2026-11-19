@@ -5,6 +5,7 @@ authentication. App-level Plaid API credentials and access tokens are saved
 only in local owner-readable files. Read-only product: transactions.
 """
 import json
+import threading
 import os
 import secrets
 import tempfile
@@ -106,7 +107,11 @@ def exchange(public_token,con):
              (label,remote,item_id,amount_cents,bank_ledger.utc())).lastrowid
         chosen.append(aid)
     return chosen
+_sync_lock=threading.Lock()
 def sync(con):
+    with _sync_lock:
+        return _sync(con)
+def _sync(con):
     items=protected_read(DATA)
     count=0
     for item_id,details in items.items():
