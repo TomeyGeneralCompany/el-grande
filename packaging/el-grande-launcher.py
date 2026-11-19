@@ -87,7 +87,6 @@ def open_dashboard():
         return
     settings = read_env()
     if not try_dashboard(settings):
-        service("disable", "--now", "el-grande-erp-setup.service", "el-grande-api.service")
         service("daemon-reload")
         desk = service("enable", "el-grande-desk.service")
         if not desk.returncode:
@@ -96,7 +95,6 @@ def open_dashboard():
         if desk.returncode:
             messagebox.showerror("El Grande startup", desk.stderr.strip() or "Could not start the service.")
             return
-    # Service startup runs the transactional migration before the HTTP listener.
     for _ in range(40):
         if try_dashboard(settings):
             webbrowser.open(URL + ("settings" if "--setup" in sys.argv else ""))

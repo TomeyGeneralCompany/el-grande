@@ -55,17 +55,15 @@ class OfficeSettingsTests(unittest.TestCase):
         self.assertIn("Add bank account",html)
         self.assertIn('action="/settings/save-bank"',html)
         self.assertIn('action="/settings/test-gmail"',html)
-        self.assertNotIn("Native BlueSeer accounting posting is kept off",html)
     def test_bank_account_saves_only_last_four_and_preserves_email(self):
         office_settings.save({"ABD_IMAP_USER":"allbydevoll@gmail.com",
                               "ABD_IMAP_APP_PASSWORD":"credential"})
-        with patch.dict(os.environ,{"ABD_BLUESEER_CONNECTED":"no"}):
-            result=office_settings.save_bank({"ABD_BANK_NAME":"Local Bank",
-                "ABD_BANK_LABEL":"Shop checking",
-                "ABD_BANK_LAST4":"4321","ABD_BLUESEER_PAYMENT_BANK":"bk"})
+        result=office_settings.save_bank({"ABD_BANK_NAME":"Local Bank",
+            "ABD_BANK_LABEL":"Shop checking",
+            "ABD_BANK_LAST4":"4321","ABD_UNUSED_SETTING":"ignored"})
         self.assertEqual(result["ABD_BANK_NAME"],"Local Bank")
         self.assertEqual(result["ABD_BANK_LAST4"],"4321")
-        self.assertNotIn("ABD_BLUESEER_PAYMENT_BANK",result)
+        self.assertNotIn("ABD_UNUSED_SETTING",result)
         self.assertEqual(result["ABD_IMAP_APP_PASSWORD"],"credential")
         self.assertEqual(office_settings.HOME_CONFIG.stat().st_mode & 0o777,0o600)
         html=office_settings.page(result,"bank-saved")

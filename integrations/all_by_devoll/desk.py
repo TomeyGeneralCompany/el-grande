@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""All by Devoll ticket and quote desk. Python stdlib only; runs alongside BlueSeer.
+"""All by Devoll ticket and quote desk.
 Site -> FormSubmit -> business Gmail inbox -> IMAP importer -> durable SQLite desk.
 """
 import base64
@@ -30,7 +30,6 @@ import parts
 import stock
 import stock_ui
 import work_orders
-import legacy_import
 import job_reports
 import job_calendar
 import shop_ui
@@ -128,15 +127,8 @@ def init():
     with closing(db()) as con, con:
         con.execute("PRAGMA journal_mode=WAL")
         con.executescript(SCHEMA + stock.DDL + parts.DDL + job_reports.DDL + job_calendar.DDL +
-                          work_orders.DDL + legacy_import.DDL + customer_payments.DDL)
+                          work_orders.DDL + customer_payments.DDL)
         bank_ledger.init(con)
-        configured_source = os.getenv("ABD_LEGACY_DB")
-        source = Path(configured_source) if configured_source else legacy_import.DEFAULT_PATH
-        if configured_source and not source.is_file() and not con.execute(
-            "SELECT 1 FROM legacy_import_complete WHERE id=1"
-        ).fetchone():
-            raise ValueError(f"The legacy database does not exist: {source}")
-        legacy_import.migrate(con, source if source.is_file() else None)
 
 
 def cash(value):
@@ -654,20 +646,6 @@ class Handler(BaseHTTPRequestHandler):
                         f"{unit_cost:.2f}",f"{(quantity*unit_cost).quantize(CENT,rounding=ROUND_HALF_UP):.2f}",
                         sheet_text(row["packing_slip"]),row["received_at"],row["reversed_at"],
                         sheet_text(row["reversal_reason"])))
-                    self.wfile.write(output.getvalue().encode())
-            return
-        if path == "/reports/legacy.csv":
-            with closing(db()) as con:
-                records = con.execute("SELECT entity,ordinal,record FROM legacy_records ORDER BY entity,ordinal")
-                self.response_headers(200, "text/csv; charset=utf-8")
-                output = io.StringIO()
-                writer = csv.writer(output)
-                writer.writerow(("record_type","row","historical_record_json"))
-                self.wfile.write(output.getvalue().encode())
-                for row in records:
-                    output.seek(0)
-                    output.truncate(0)
-                    writer.writerow(row)
                     self.wfile.write(output.getvalue().encode())
             return
         if path in stock_ui.MASTERS or path in ("/inventory/item", "/purchases") or re.fullmatch(r"/purchases/[0-9]+", path):

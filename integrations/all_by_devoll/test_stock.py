@@ -7,12 +7,10 @@ from threading import Thread
 from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
-import sqlite3
 import unittest
 from unittest.mock import patch
 
 import desk
-import stock_reconcile
 
 
 class StockWorkflowTests(unittest.TestCase):
@@ -122,24 +120,3 @@ class StockWorkflowTests(unittest.TestCase):
             self.receive("1")
         self.assertEqual(failure.exception.code, 502)
         self.assertEqual(self.state(), ("open", 0, 0, 0, 0))
-
-    def test_read_only_reconciliation_finds_stock_and_open_order_deltas(self):
-        self.order()
-        self.receive("2")
-        with sqlite3.connect(":memory:") as original, closing(desk.db()) as local:
-            original.executescript("""
-                CREATE TABLE in_mstr(in_item,in_site,in_wh,in_loc,in_qoh);
-                CREATE TABLE po_mstr(po_nbr,po_status);
-                CREATE TABLE pod_mstr(pod_nbr,pod_line,pod_item,pod_ord_qty,pod_rcvd_qty,pod_status);
-                INSERT INTO in_mstr VALUES('STARTER','1000','MAIN','MAINLOC',2.5);
-                INSERT INTO po_mstr VALUES('89000001','open');
-                INSERT INTO pod_mstr VALUES('89000001',2,'STARTER',3,2.5,'open');
-            """)
-            report = stock_reconcile.compare(original, local)
-            self.assertEqual(report["stock_differences"][0]["blueseer"], "2.5")
-            self.assertEqual(report["stock_differences"][0]["el_grande"], "2")
-            self.assertEqual(report["open_order_differences"][0]["blueseer"], "0.5")
-            self.assertEqual(report["open_order_differences"][0]["el_grande"], "1")
-            original.execute("UPDATE in_mstr SET in_qoh=2")
-            original.execute("UPDATE pod_mstr SET pod_rcvd_qty=2")
-            self.assertFalse(any(stock_reconcile.compare(original, local).values()))

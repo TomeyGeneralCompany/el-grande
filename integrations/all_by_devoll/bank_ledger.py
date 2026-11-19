@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS bank_feed(
 );
 """
 # An immutable snapshot of the physical count and the recorded cashbook balance.
-# Counting cash never changes the register, customer payments or native BlueSeer.
+# Counting cash never changes the register or customer payments.
 CASH_COUNT_DDL="""
 CREATE TABLE IF NOT EXISTS cash_counts (
  id INTEGER PRIMARY KEY AUTOINCREMENT,

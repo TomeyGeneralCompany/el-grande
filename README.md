@@ -6,9 +6,7 @@ Install the Zorin/Debian package and open **El Grande — All by Devoll** from t
 
 ## Existing installations
 
-The first standalone launch stops the old ERP service before starting the new desk. It reads the former installed BlueSeer SQLite database, imports operational inventory, orders and work orders, and preserves historical transaction and accounting rows in the shop database. The import is transactional and runs once. The old database file, shop tickets, payments, and saved PDFs are preserved.
-
-See [installer and upgrade details](packaging/README.md) for paths and the read-only comparison command.
+The installer uses the existing El Grande database for shop records. See the [installer details](packaging/README.md) for the database path and backup guidance.
 
 ## Test and package
 
@@ -20,4 +18,4 @@ bash packaging/smoke-standalone.sh
 
 ## License
 
-El Grande is proprietary to Tomey General Company, LLC. See the [copyright notice](LICENSE). Historical BlueSeer versions retain the notices in their respective commits.
+El Grande is proprietary to Tomey General Company, LLC. See the [copyright notice](LICENSE).
