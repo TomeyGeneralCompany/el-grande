@@ -36,6 +36,7 @@ table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:9px;bord
 </style></head><body><header>ALL BY DEVOLL — MONEY</header><main>
 <a href="/">← Jobs</a> · <a href="/settings">Settings</a>
 <h1>Money in &amp; out</h1>
+<p><a href="/bank/export.csv">Download full money ledger (CSV)</a></p>
 <p class="muted">Record customer receipts, expenses and deposits without terminal commands. Your local register works even if no bank is connected.</p>''']
     if message:content.append('<p class="notice">'+e(message)+'</p>')
     content.append('<div class="cards">')
