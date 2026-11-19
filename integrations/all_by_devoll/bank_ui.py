@@ -8,6 +8,8 @@ def e(x):return html.escape(str(x if x is not None else ""),quote=True)
 def page(con,provider_ready=False,status=""):
     rows=bank_ledger.accounts(con)
     entries=bank_ledger.recent_entries(con)
+    cash_accounts=bank_ledger.cash_accounts(con)
+    cash_counts=bank_ledger.recent_cash_counts(con)
     feed=con.execute("""SELECT f.*,a.name account_name
           FROM bank_feed f JOIN money_accounts a ON a.id=f.account_id
           ORDER BY f.entry_date DESC,f.id DESC LIMIT 50""").fetchall()
@@ -19,7 +21,7 @@ def page(con,provider_ready=False,status=""):
       "synced":"Bank balances and transactions refreshed.",
       "matched":"Imported transaction matched to a register entry.",
       "added":"Bank transaction recorded in register.",
-      "account":"Account added.","error":"Bank operation could not be completed."}.get(status,"")
+      "account":"Account added.","counted":"Safe cash count saved.","error":"Bank operation could not be completed."}.get(status,"")
     content=['''<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>Money | El Grande</title>
 <style>*{box-sizing:border-box}body{margin:0;background:#f5f7f6;color:#193634;font:15px/1.5 system-ui,sans-serif}
@@ -64,6 +66,150 @@ table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:9px;bord
       +'<label>Date<input name="entry_date" type="date" value="'+date.today().isoformat()+'" required></label>'
       +'<label>Note<input name="memo" maxlength="300"></label>'
       +'<button type="submit">Record transfer</button></form></div></section>')
+    cash_choices="".join('<option value="'+str(a["id"])+'">'+e(a["name"])+'</option>' for a in cash_accounts)
+    content.append('<section><h2>Count cash in the safe</h2>'
+        '<p class="muted">Enter the actual cash physically in the safe. El Grande compares it to the recorded amount and keeps a dated history. A difference will not change the books automatically.</p>')
+    if cash_accounts:
+        content.append('<form method="post" action="/bank/cash-count">'
+          '<label>Cash account<select name="account_id">'+cash_choices+'</select></label>'
+          '<label>Cash physically counted ($)<input name="counted_amount" type="number" min="0" step=".01" required></label>'
+          '<label>Date<input name="count_date" type="date" value="'+date.today().isoformat()+'" required></label>'
+          '<label>Count notes (optional)<input name="notes" maxlength="300"></label>'
+          '<button type="submit">Save cash count</button></form>')
+    if cash_counts:
+        content.append('<h3>Safe-count history</h3><div class="wrap"><table>'
+          '<thead><tr><th>Date</th><th>Cash account</th><th>In safe</th><th>Recorded</th><th>Difference</th><th>Notes</th></tr></thead><tbody>')
+        for count in cash_counts:
+            diff=int(count["variance_cents"])
+            content.append('<tr><td>'+e(count["count_date"])+'</td>'
+             '<td>'+e(count["account_name"])+'</td>'
+             '<td>
+    if provider_ready:
+        content.append('<a class="button" href="/bank/connect">Connect bank</a> '
+          +'<form method="post" action="/bank/sync" style="display:inline"><button>Refresh bank balances &amp; activity</button></form>')
+    else:
+        content.append('<p>To connect an institution, enter the bank connection credentials in <a href="/settings">Settings</a>.'
+        'You can use the ledger without connecting a bank.</p>')
+    content.append('<form method="post" action="/bank/account"><h3>Add register account</h3>'
+        '<label>Account name<input name="name" maxlength="80" placeholder="Business checking" required></label>'
+        '<button>Add account</button></form></section>')
+    content.append('<section><h2>Recent money movements</h2><div class="wrap"><table>'
+      '<thead><tr><th>Date</th><th>Account</th><th>Description</th><th>Money in / out</th><th>Source</th></tr></thead><tbody>')
+    for item in entries:
+        amt=int(item["amount_cents"])
+        content.append('<tr><td>'+e(item["entry_date"])+'</td><td>'+e(item["account_name"])
+         +'</td><td>'+e(item["memo"] or item["category"])+'</td>'
+         +'<td>'+('+' if amt>0 else '−')+'$'+bank_ledger.amount(abs(amt))+'</td>'
+         +'<td>'+e(item["source"])+'</td></tr>')
+    content.append('</tbody></table></div></section>')
+    if feed:
+        content.append('<section><h2>Imported bank activity</h2>'
+          '<p class="muted">Bank activity is kept alongside the register. Match a transaction to an existing entry, or add it to your register once.</p>'
+          '<div class="wrap"><table><thead><tr><th>Date</th><th>Account</th><th>Description</th><th>Amount</th><th>Register</th></tr></thead><tbody>')
+        for item in feed:
+            val=int(item["amount_cents"])
+            content.append('<tr><td>'+e(item["entry_date"])+'</td><td>'+e(item["account_name"])
+              +'</td><td>'+e(item["description"])+'</td><td>'+('+' if val>0 else '−')+'$'+bank_ledger.amount(abs(val))+'</td><td>')
+            if item["linked_entry_id"]:
+                content.append('Recorded #'+str(item["linked_entry_id"]))
+            else:
+                content.append('<form method="post" action="/bank/feed-add"><input type="hidden" name="feed_id" value="'+str(item["id"])+'">'
+                  '<button>Add to register</button></form>'
+                  '<form method="post" action="/bank/feed-match">'
+                  '<input type="hidden" name="feed_id" value="'+str(item["id"])+'">'
+                  '<label>Match entry #<input type="number" min="1" name="entry_id" required></label>'
+                  '<button>Match</button></form>')
+            content.append('</td></tr>')
+        content.append('</tbody></table></div></section>')
+    content.append('</main></body></html>')
+    return "".join(content)
++bank_ledger.amount(count["counted_cents"])+'</td>'
+             '<td>
+    if provider_ready:
+        content.append('<a class="button" href="/bank/connect">Connect bank</a> '
+          +'<form method="post" action="/bank/sync" style="display:inline"><button>Refresh bank balances &amp; activity</button></form>')
+    else:
+        content.append('<p>To connect an institution, enter the bank connection credentials in <a href="/settings">Settings</a>.'
+        'You can use the ledger without connecting a bank.</p>')
+    content.append('<form method="post" action="/bank/account"><h3>Add register account</h3>'
+        '<label>Account name<input name="name" maxlength="80" placeholder="Business checking" required></label>'
+        '<button>Add account</button></form></section>')
+    content.append('<section><h2>Recent money movements</h2><div class="wrap"><table>'
+      '<thead><tr><th>Date</th><th>Account</th><th>Description</th><th>Money in / out</th><th>Source</th></tr></thead><tbody>')
+    for item in entries:
+        amt=int(item["amount_cents"])
+        content.append('<tr><td>'+e(item["entry_date"])+'</td><td>'+e(item["account_name"])
+         +'</td><td>'+e(item["memo"] or item["category"])+'</td>'
+         +'<td>'+('+' if amt>0 else '−')+'$'+bank_ledger.amount(abs(amt))+'</td>'
+         +'<td>'+e(item["source"])+'</td></tr>')
+    content.append('</tbody></table></div></section>')
+    if feed:
+        content.append('<section><h2>Imported bank activity</h2>'
+          '<p class="muted">Bank activity is kept alongside the register. Match a transaction to an existing entry, or add it to your register once.</p>'
+          '<div class="wrap"><table><thead><tr><th>Date</th><th>Account</th><th>Description</th><th>Amount</th><th>Register</th></tr></thead><tbody>')
+        for item in feed:
+            val=int(item["amount_cents"])
+            content.append('<tr><td>'+e(item["entry_date"])+'</td><td>'+e(item["account_name"])
+              +'</td><td>'+e(item["description"])+'</td><td>'+('+' if val>0 else '−')+'$'+bank_ledger.amount(abs(val))+'</td><td>')
+            if item["linked_entry_id"]:
+                content.append('Recorded #'+str(item["linked_entry_id"]))
+            else:
+                content.append('<form method="post" action="/bank/feed-add"><input type="hidden" name="feed_id" value="'+str(item["id"])+'">'
+                  '<button>Add to register</button></form>'
+                  '<form method="post" action="/bank/feed-match">'
+                  '<input type="hidden" name="feed_id" value="'+str(item["id"])+'">'
+                  '<label>Match entry #<input type="number" min="1" name="entry_id" required></label>'
+                  '<button>Match</button></form>')
+            content.append('</td></tr>')
+        content.append('</tbody></table></div></section>')
+    content.append('</main></body></html>')
+    return "".join(content)
++bank_ledger.amount(count["expected_cents"])+'</td>'
+             '<td>'+('+' if diff>0 else '−' if diff<0 else '')+'
+    if provider_ready:
+        content.append('<a class="button" href="/bank/connect">Connect bank</a> '
+          +'<form method="post" action="/bank/sync" style="display:inline"><button>Refresh bank balances &amp; activity</button></form>')
+    else:
+        content.append('<p>To connect an institution, enter the bank connection credentials in <a href="/settings">Settings</a>.'
+        'You can use the ledger without connecting a bank.</p>')
+    content.append('<form method="post" action="/bank/account"><h3>Add register account</h3>'
+        '<label>Account name<input name="name" maxlength="80" placeholder="Business checking" required></label>'
+        '<button>Add account</button></form></section>')
+    content.append('<section><h2>Recent money movements</h2><div class="wrap"><table>'
+      '<thead><tr><th>Date</th><th>Account</th><th>Description</th><th>Money in / out</th><th>Source</th></tr></thead><tbody>')
+    for item in entries:
+        amt=int(item["amount_cents"])
+        content.append('<tr><td>'+e(item["entry_date"])+'</td><td>'+e(item["account_name"])
+         +'</td><td>'+e(item["memo"] or item["category"])+'</td>'
+         +'<td>'+('+' if amt>0 else '−')+'$'+bank_ledger.amount(abs(amt))+'</td>'
+         +'<td>'+e(item["source"])+'</td></tr>')
+    content.append('</tbody></table></div></section>')
+    if feed:
+        content.append('<section><h2>Imported bank activity</h2>'
+          '<p class="muted">Bank activity is kept alongside the register. Match a transaction to an existing entry, or add it to your register once.</p>'
+          '<div class="wrap"><table><thead><tr><th>Date</th><th>Account</th><th>Description</th><th>Amount</th><th>Register</th></tr></thead><tbody>')
+        for item in feed:
+            val=int(item["amount_cents"])
+            content.append('<tr><td>'+e(item["entry_date"])+'</td><td>'+e(item["account_name"])
+              +'</td><td>'+e(item["description"])+'</td><td>'+('+' if val>0 else '−')+'$'+bank_ledger.amount(abs(val))+'</td><td>')
+            if item["linked_entry_id"]:
+                content.append('Recorded #'+str(item["linked_entry_id"]))
+            else:
+                content.append('<form method="post" action="/bank/feed-add"><input type="hidden" name="feed_id" value="'+str(item["id"])+'">'
+                  '<button>Add to register</button></form>'
+                  '<form method="post" action="/bank/feed-match">'
+                  '<input type="hidden" name="feed_id" value="'+str(item["id"])+'">'
+                  '<label>Match entry #<input type="number" min="1" name="entry_id" required></label>'
+                  '<button>Match</button></form>')
+            content.append('</td></tr>')
+        content.append('</tbody></table></div></section>')
+    content.append('</main></body></html>')
+    return "".join(content)
+
+             +bank_ledger.amount(abs(diff))+'</td>'
+             '<td>'+e(count["notes"])+'</td></tr>')
+        content.append('</tbody></table></div>')
+    content.append('</section>')
     content.append('<section><h2>Bank connection</h2>')
     if provider_ready:
         content.append('<a class="button" href="/bank/connect">Connect bank</a> '
