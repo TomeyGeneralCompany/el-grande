@@ -2,11 +2,13 @@ name: El Grande Zorin installer
 on:
   push:
     paths:
+      - 'LICENSE'
       - 'packaging/**'
       - 'integrations/all_by_devoll/**'
       - '.github/workflows/el-grande-installer.yml'
   pull_request:
     paths:
+      - 'LICENSE'
       - 'packaging/**'
       - 'integrations/all_by_devoll/**'
       - '.github/workflows/el-grande-installer.yml'

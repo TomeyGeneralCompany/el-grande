@@ -18,4 +18,6 @@ bash packaging/build-deb.sh
 bash packaging/smoke-standalone.sh
 ```
 
-The previous Java implementation and its build are available through repository history. See [LICENSE](LICENSE) for the inherited notice.
+## License
+
+El Grande is proprietary to Tomey General Company, LLC. See the [copyright notice](LICENSE). Historical BlueSeer versions retain the notices in their respective commits.
