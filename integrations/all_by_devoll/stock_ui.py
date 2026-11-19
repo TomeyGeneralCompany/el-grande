@@ -80,8 +80,6 @@ def master_page(con, path, query):
     page += navigation(path, "after", after, records[PAGE_SIZE-1][key] if len(records)>PAGE_SIZE else None,
                        {"q": prefix} if prefix else None)
     save = form(path + "/save", "".join(control(name, label) for name, label in fields), "Save")
-    if path == "/inventory":
-        links += '<p>Reconcile existing BlueSeer quantities before recording movements for existing stock.</p>'
     return shop_ui.page_shell(section(title, links + search + page) + section("Add or update", save))
 
 
@@ -129,7 +127,7 @@ def order_page(con, query):
     create = form("/purchases/new", control("vendor", "Vendor code") +
                   control("reference", "Purchase order reference (optional)", required=False), "Create draft", request=True)
     return shop_ui.page_shell(section("Purchase orders",
-        '<p><a href="/inventory/vendors">Find a vendor code</a></p>' +
+        '<p><a href="/inventory/vendors">Find a vendor code</a> · <a href="/reports/purchases.csv">Export receipts</a></p>' +
         list_table(("Order", "Reference", "Vendor", "Status"), orders) +
         navigation("/purchases", "before", before, rows[PAGE_SIZE-1]["id"] if len(rows)>PAGE_SIZE else None)) +
         section("New purchase order", create))

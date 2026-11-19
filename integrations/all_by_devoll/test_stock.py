@@ -94,6 +94,9 @@ class StockWorkflowTests(unittest.TestCase):
         self.post("/inventory/adjust", sku="STARTER", bin="MAIN", quantity="-0.25",
                   reason="Used on a job", request=correction)
         self.assertEqual(self.state(), ("open", 1_750_000, 1_500_000, 2, 4))
+        export = self.get("/reports/purchases.csv")
+        self.assertIn("1.25,12.00,15.00", export)
+        self.assertIn("Duplicate packing slip", export)
         desk.init()
         self.assertEqual(self.state(), ("open", 1_750_000, 1_500_000, 2, 4))
 

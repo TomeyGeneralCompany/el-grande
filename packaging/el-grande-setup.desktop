@@ -1,9 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=El Grande Setup
-Comment=Configure business email and reporting
-Exec=/usr/bin/python3 /opt/el-grande/packaging/el-grande-launcher.py --setup
-Icon=preferences-system
-Terminal=false
-Categories=Office;Settings;
-StartupNotify=true

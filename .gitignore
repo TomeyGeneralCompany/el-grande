@@ -1,17 +1,6 @@
-build
-nbbuild
-dist
-target
-nbdist
-jre8
-jre11
-jre16
-jre17
-test2
-!scripts/build.xml
-nbproject/private/
-.nb-gradle/
-
+build/
+artifacts/
+__pycache__/
 # All by Devoll local runtime and credentials
 integrations/all_by_devoll/data/
 integrations/all_by_devoll/*.sqlite3
