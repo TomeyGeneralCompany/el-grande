@@ -41,6 +41,14 @@ def main():
     print("Native service order first/second:",order_result,order_second[1])
     print("Native quote response:",str(client.get("dataServORD","getQuoteMstr",quote))[:300])
     print("Native order response:",str(client.get("dataServORD","getServiceOrderMstr",order))[:300])
+    import sqlite3
+    with sqlite3.connect(str(path)) as db:
+        for table in ("cm_mstr","quo_mstr","sv_mstr"):
+            cols=[x[1] for x in db.execute('PRAGMA table_info("'+table+'")')]
+            idcol=next((x for x in cols if x in ("cm_code","quo_nbr","sv_nbr")),None)
+            if idcol:
+                row=db.execute(f"SELECT count(*) FROM {table} WHERE {idcol}=?",("ABD950000",)).fetchone()
+                print("Native DB",table,"matching records:",row[0])
     assert quote_second[1]=="exists"
     assert order_second[1]=="exists"
     print("Native ERP integration PASS: customer, internal quote, service order, idempotent reads.")
