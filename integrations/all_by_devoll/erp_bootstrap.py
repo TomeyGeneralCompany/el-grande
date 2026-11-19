@@ -7,6 +7,7 @@ All write operations to BlueSeer go through its native authenticated API.
 """
 import os
 import re
+import secrets
 import sqlite3
 import sys
 from datetime import date
@@ -64,6 +65,30 @@ def discover_database(path=ERP_DB):
         if not has_value(con,"user_mstr","admin"):
             raise ValueError("Packaged default ERP administrator is not present; use existing credentials")
         return {"site":site,"ar_account":ar,"terms":terms}
+
+def ensure_seed_account_password(db_path,env_path,settings,user):
+    """Repair a fresh demo account stored unencoded in the upstream seed DB.
+
+    BlueSeer's Java PassWord('1',...) subtracts 222 from each stored
+    character. The shipped seed sometimes contains plain 'admin', which the
+    native API therefore can never authenticate. Do not touch modified users.
+    """
+    chosen=settings.get("ABD_BLUESEER_PASSWORD","").strip()
+    if chosen:return chosen
+    with sqlite3.connect(str(db_path),timeout=8) as con:
+        row=con.execute("SELECT user_passwd FROM user_mstr WHERE user_id=?",(user,)).fetchone()
+        if row is None:raise ValueError("BlueSeer user not present")
+        if user=="admin" and row[0]=="admin":
+            chosen=secrets.token_urlsafe(24)
+            encoded="".join(chr(ord(c)+222) for c in chosen)
+            con.execute("""UPDATE user_mstr SET user_passwd=?
+                  WHERE user_id=? AND user_passwd='admin'""",(encoded,user))
+            settings["ABD_BLUESEER_PASSWORD"]=chosen
+            # Persist the generated credential before authentication, so an
+            # interrupted setup cannot orphan the only usable local account.
+            write_env(env_path,settings)
+            return chosen
+    return "admin"
 
 def allow_loopback_api_user(db_path,username):
     """Permit only this workstation's API caller in BlueSeer's own user IP ACL.
@@ -142,7 +167,7 @@ def configure(path=ERP_DB,envpath=ENV,client_factory=blue_bridge.BlueSeerClient)
     settings=read_env(envpath)
     discovery=discover_database(path)
     user=settings.get("ABD_BLUESEER_USER") or "admin"
-    password=settings.get("ABD_BLUESEER_PASSWORD") or "admin"
+    password=ensure_seed_account_password(path,envpath,settings,user)
     # The local Java API checks both password and an explicit usr_meta IP
     # ACL. This is a *loopback-only* workstation; never allow remote IPs.
     allow_loopback_api_user(path,user)
