@@ -34,6 +34,9 @@ import office_settings
 import erp_jobs
 import erp_receipts
 import customer_payments
+import bank_ledger
+import bank_ui
+import bank_connect
 import invoice_pdf
 import urllib.error
 import customer_bridge
@@ -135,6 +138,7 @@ def init():
         if "blue_ship_to" not in cols:
             con.execute("ALTER TABLE tickets ADD COLUMN blue_ship_to TEXT NOT NULL DEFAULT ''")
         erp_receipts.init_queue(con)
+        bank_ledger.init(con)
 
 def cash(value):
     try:
@@ -592,10 +596,10 @@ def render(rows,catalog=None):
     return shop_ui.render(rows,catalog or [],db,amounts,system_status())
 
 class Handler(BaseHTTPRequestHandler):
-    def response_headers(self,code=200,typ="text/html; charset=utf-8"):
+    def response_headers(self,code=200,typ="text/html; charset=utf-8",csp=None):
         self.send_response(code);self.send_header("Content-Type",typ)
         self.send_header("Cache-Control","no-store");self.send_header("X-Content-Type-Options","nosniff")
-        self.send_header("Content-Security-Policy","default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
+        self.send_header("Content-Security-Policy",csp or "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
         self.send_header("X-Frame-Options","DENY");self.end_headers()
     def auth(self):
         # A single-machine installation should open on localhost without a login.
@@ -629,6 +633,22 @@ class Handler(BaseHTTPRequestHandler):
                 partq=parse_qs(urlsplit(self.path).query).get("partq",[""])[0].strip()
                 catalog=parts.search(con,partq[:100],limit=100) if partq else con.execute("SELECT * FROM supplier_parts ORDER BY checked_at DESC LIMIT 100").fetchall()
             return self.response_text(render(rows,catalog))
+        if path=="/bank":
+            with db() as con:
+                bank_ledger.init(con)
+                page=bank_ui.page(con,bank_connect.ready()[0],parse_qs(urlsplit(self.path).query).get("status",[""])[0])
+            return self.response_text(page)
+        if path=="/bank/connect":
+            token=bank_connect.link_token()
+            nonce=secrets.token_urlsafe(24)
+            page=bank_connect.connection_page(token,nonce)
+            csp=("default-src 'none'; style-src 'unsafe-inline'; "
+                 "script-src 'nonce-"+nonce+"' https://cdn.plaid.com https://*.plaid.com; "
+                 "connect-src 'self' https://*.plaid.com; frame-src https://*.plaid.com; "
+                 "form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
+            self.response_headers(csp=csp)
+            self.wfile.write(page.encode("utf-8"))
+            return
         if path=="/settings":
             return self.response_text(office_settings.page(office_settings.existing(),
                                   parse_qs(urlsplit(self.path).query).get("status",[""])[0]))
@@ -693,6 +713,30 @@ class Handler(BaseHTTPRequestHandler):
         data={k:v[0] for k,v in parse_qs(self.rfile.read(size).decode("utf-8",errors="replace"),keep_blank_values=True).items()}
         path=urlsplit(self.path).path
         try:
+            if path=="/bank/provider-settings":
+                bank_connect.setup(data)
+                return self.redirect("/settings?status=plaid-saved")
+            if path=="/bank/exchange":
+                with db() as con:bank_connect.exchange(data.get("public_token",""),con)
+                return self.response_text("Bank connected",typ="text/plain")
+            if path=="/bank/sync":
+                with db() as con:bank_connect.sync(con)
+                return self.redirect("/bank?status=synced")
+            if path=="/bank/entry":
+                with db() as con:bank_ledger.record(con,data)
+                return self.redirect("/bank?status=recorded")
+            if path=="/bank/transfer":
+                with db() as con:bank_ledger.transfer(con,data)
+                return self.redirect("/bank?status=transferred")
+            if path=="/bank/account":
+                with db() as con:bank_ledger.new_account(con,data.get("name",""))
+                return self.redirect("/bank?status=account")
+            if path=="/bank/feed-add":
+                with db() as con:bank_ledger.feed_record(con,int(data.get("feed_id",0)))
+                return self.redirect("/bank?status=added")
+            if path=="/bank/feed-match":
+                with db() as con:bank_ledger.feed_match(con,int(data.get("feed_id",0)),int(data.get("entry_id",0)))
+                return self.redirect("/bank?status=matched")
             if path=="/settings/save":
                 office_settings.save(data)
                 return self.redirect("/settings?status=saved")
