@@ -101,7 +101,7 @@ class PaymentLedgerTests(unittest.TestCase):
         self.assertIn("Record payment",html)
         self.assertIn("Still owed",html)
         self.assertIn("60.00",html)
-        self.assertIn("Correct this payment",html)
+        self.assertIn("Correct payment",html)
         self.assertNotIn("Mark paid",html)
         self.assertNotIn("Complete the accounting setup before creating financial records",html)
     def test_only_completed_jobs_accept_payment(self):
