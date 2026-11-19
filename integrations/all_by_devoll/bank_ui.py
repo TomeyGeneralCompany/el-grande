@@ -66,7 +66,7 @@ table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:9px;bord
       +'<button type="submit">Record transfer</button></form></div></section>')
     content.append('<section><h2>Bank connection</h2>')
     if provider_ready:
-        content.append('<a class="button" href="/bank/connect">Connect another bank</a> '
+        content.append('<a class="button" href="/bank/connect">Connect bank</a> '
           +'<form method="post" action="/bank/sync" style="display:inline"><button>Refresh bank balances &amp; activity</button></form>')
     else:
         content.append('<p>To connect an institution, enter the bank connection credentials in <a href="/settings">Settings</a>.'
