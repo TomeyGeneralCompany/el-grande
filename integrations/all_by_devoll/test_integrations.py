@@ -199,6 +199,7 @@ class BlueSeerTests(unittest.TestCase):
         base="http://127.0.0.1:8080/bsapi",user="tester",password="test-pass",transport=transport)
     client.post("dataServORD","addQuoteTransaction","sample")
     self.assertEqual(calls[0][1]["pass"],"test-pass")
+    self.assertEqual(calls[0][1]["Authorization"],"Basic "+base64.b64encode(b"tester:test-pass").decode())
     self.assertEqual(calls[1][1]["sessionid"],"fake-session")
     self.assertEqual(calls[1][1]["id"],"addQuoteTransaction")
 
