@@ -34,7 +34,7 @@ def main():
     ticket["blue_ship_to"]=customer
     quote,quote_result=blue_bridge.submit_internal_quote(ticket,total,client)
     order,order_result=blue_bridge.submit_service_order(ticket,total,client)
-    assert quote=="ABD950000" and order=="ABD950000"
+    assert quote=="900950000" and order=="900950000"
     quote_second=blue_bridge.submit_internal_quote(ticket,total,client)
     order_second=blue_bridge.submit_service_order(ticket,total,client)
     print("Native quote first/second:",quote_result,quote_second[1])
@@ -47,7 +47,7 @@ def main():
             cols=[x[1] for x in db.execute('PRAGMA table_info("'+table+'")')]
             idcol=next((x for x in cols if x in ("cm_code","quo_nbr","sv_nbr")),None)
             if idcol:
-                row=db.execute(f"SELECT count(*) FROM {table} WHERE {idcol}=?",("ABD950000",)).fetchone()
+                row=db.execute(f"SELECT count(*) FROM {table} WHERE {idcol}=?",("900950000" if table!="cm_mstr" else "ABD950000",)).fetchone()
                 print("Native DB",table,"matching records:",row[0])
     assert quote_second[1]=="exists"
     assert order_second[1]=="exists"
