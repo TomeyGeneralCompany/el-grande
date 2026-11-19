@@ -57,7 +57,7 @@ class BankRoutesTests(unittest.TestCase):
             "account_id":str(cash),"counted_amount":"42.75",
             "notes":"Cash counted and locked in safe"})
         self.assertEqual(code,200)
-        self.assertIn("Safe-count history",content)
+        self.assertIn("Past cash counts",content)
         self.assertIn("42.75",content)
         with desk.db() as con:
             row=con.execute("SELECT * FROM cash_counts ORDER BY id DESC LIMIT 1").fetchone()
