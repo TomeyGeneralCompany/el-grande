@@ -26,7 +26,7 @@ class ShopUITests(unittest.TestCase):
             "erp":{"running":False,"configured":False}})
     def test_operator_branding_not_settlement_branding(self):
         page=self.page()
-        self.assertIn("ALL BY DEVOLL",page)
+        self.assertIn("All by Devoll, LLC",page)
         self.assertIn("Today's job desk",page)
         self.assertNotIn("Tomey General 15%",page)
         self.assertNotIn("No invented prices",page)
