@@ -15,6 +15,7 @@ from datetime import datetime,timezone,timedelta
 from decimal import Decimal
 import blue_bridge
 import customer_bridge
+import invoice_bridge
 
 LOG=logging.getLogger("el-grande.erp")
 DDL="""
@@ -61,9 +62,10 @@ def process_once(database,calculate):
             if not row or not row["finalized_at"]:
                 raise ValueError("Job is not finalized")
             amount=calculate(row)
-            # The native ERP source documents must match actual customer billing.
-            if Decimal(str(amount["total"]))!=Decimal(str(amount["basis"])):
-                raise ValueError("Actual invoice and job estimate differ; review before ERP order")
+            # The finalized customer bill is authoritative. Native order and
+            # invoice lines are both built from this amount, not draft prices.
+            if Decimal(str(amount["basis"]))<=0:
+                raise ValueError("A zero-dollar completed job has no invoice to post")
         client=blue_bridge.BlueSeerClient()
         customer= row["blue_customer"]
         if not customer:
@@ -82,16 +84,57 @@ def process_once(database,calculate):
              record_number=excluded.record_number,state='synced',
              updated_at=excluded.updated_at,detail=excluded.detail""",
              (ticket_id,key,utc(),kind))
-            con.execute("UPDATE erp_jobs SET state='synced',updated_at=?,last_error='' WHERE ticket_id=?",
-                        (utc(),ticket_id))
             con.execute("INSERT INTO events(ticket_id,timestamp,event,detail) VALUES(?,?,?,?)",
                         (ticket_id,utc(),"blueseer_service_order",key))
+            # This row acts as a durable commit barrier. An interrupted or
+            # ambiguous native invoice cannot be automatically re-posted.
+            prior=con.execute("SELECT record_number,state FROM blue_sync WHERE ticket_id=? AND kind='invoice'",
+                              (ticket_id,)).fetchone()
+            if prior:
+                if prior["state"]=="posted":
+                    con.execute("UPDATE erp_jobs SET state='posted',updated_at=?,last_error='' WHERE ticket_id=?",
+                                (utc(),ticket_id))
+                    return 1
+                con.execute("UPDATE erp_jobs SET state='needs_review',updated_at=?,last_error=? WHERE ticket_id=?",
+                            (utc(),"Previous invoice outcome requires native reconciliation",ticket_id))
+                return 0
+        # Reserve a native shipment number then commit that reservation locally
+        # *before* transmitting any invoice data to the ERP.
+        native_id=invoice_bridge.reserve_native_shipment_number(client)
+        with database() as con:
+            con.execute("""INSERT INTO blue_sync(ticket_id,kind,record_number,state,updated_at,detail)
+                         VALUES (?, 'invoice', ?, 'reserved', ?, 'Automatic final-bill invoice')
+                         """,(ticket_id,native_id,utc()))
+        try:
+            invoice_bridge.post_native_invoice(row,amount,native_id,client)
+        except Exception:
+            with database() as con:
+                con.execute("""UPDATE blue_sync SET state='unknown',updated_at=?,
+                             detail='Native invoice outcome requires reconciliation' 
+                             WHERE ticket_id=? AND kind='invoice'""",(utc(),ticket_id))
+            raise
+        with database() as con:
+            con.execute("""UPDATE blue_sync SET state='posted',updated_at=?,
+                          detail='Native invoice / AR-GL confirmed' 
+                          WHERE ticket_id=? AND kind='invoice'""",(utc(),ticket_id))
+            con.execute("UPDATE erp_jobs SET state='posted',updated_at=?,last_error='' WHERE ticket_id=?",
+                        (utc(),ticket_id))
+            con.execute("UPDATE tickets SET status='invoiced',updated_at=? WHERE id=? AND status!='paid'",
+                        (utc(),ticket_id))
+            con.execute("INSERT INTO events(ticket_id,timestamp,event,detail) VALUES(?,?,?,?)",
+                        (ticket_id,utc(),"blueseer_native_invoice",native_id))
         return 1
     except Exception as err:
         # Do not discard a finalized job. API responses may have succeeded
         # remotely even if a response was lost; retry checks native records.
         reason=str(err)[:300]
-        state="needs_review" if isinstance(err,ValueError) else "failed"
+        # A reserved/unknown invoice can never be automatically replayed:
+        # BlueSeer may have received the original commit despite an error.
+        with database() as con:
+            inv=con.execute("SELECT state FROM blue_sync WHERE ticket_id=? AND kind='invoice'",
+                            (ticket_id,)).fetchone()
+        state=("needs_review" if (inv and inv["state"]!="posted") or
+               isinstance(err,ValueError) else "failed")
         backoff=min(3600,60*(2**min(attempts,6)))
         retry=(datetime.now(timezone.utc)+timedelta(seconds=backoff)).isoformat(timespec="seconds")
         with database() as con:
