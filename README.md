@@ -18,4 +18,6 @@ bash packaging/build-deb.sh
 bash packaging/smoke-standalone.sh
 ```
 
-The previous Java implementation and its build are available through repository history. See [NOTICES](NOTICES) for the inherited notice.
+## License
+
+The current El Grande release is available under the [MIT License](LICENSE). Historical BlueSeer versions retain the notices in their respective commits.
