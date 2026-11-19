@@ -49,6 +49,47 @@ class OfficeSettingsTests(unittest.TestCase):
     def test_gmail_test_does_not_login_without_credentials(self):
         with patch.dict(os.environ,{"ABD_IMAP_APP_PASSWORD":"","ABD_IMAP_USER":""}):
             with self.assertRaises(ValueError):office_settings.test_gmail()
+    def test_clickable_gmail_and_bank_panels(self):
+        html=office_settings.page({},"")
+        self.assertIn("Add Gmail connection",html)
+        self.assertIn("Add bank account",html)
+        self.assertIn('action="/settings/save-bank"',html)
+        self.assertIn('action="/settings/test-gmail"',html)
+        self.assertNotIn("Native BlueSeer accounting posting is kept off",html)
+    def test_bank_account_saves_only_last_four_and_preserves_email(self):
+        office_settings.save({"ABD_IMAP_USER":"allbydevoll@gmail.com",
+                              "ABD_IMAP_APP_PASSWORD":"credential"})
+        with patch.dict(os.environ,{"ABD_BLUESEER_CONNECTED":"no"}):
+            result=office_settings.save_bank({"ABD_BANK_NAME":"Local Bank",
+                "ABD_BANK_LABEL":"Shop checking",
+                "ABD_BANK_LAST4":"4321","ABD_BLUESEER_PAYMENT_BANK":"bk"})
+        self.assertEqual(result["ABD_BANK_NAME"],"Local Bank")
+        self.assertEqual(result["ABD_BANK_LAST4"],"4321")
+        self.assertEqual(result["ABD_BLUESEER_PAYMENT_BANK"],"BK")
+        self.assertEqual(result["ABD_IMAP_APP_PASSWORD"],"credential")
+        self.assertEqual(office_settings.HOME_CONFIG.stat().st_mode & 0o777,0o600)
+        html=office_settings.page(result,"bank-saved")
+        self.assertIn("Local Bank",html)
+        self.assertIn("4321",html)
+        self.assertNotIn("credential",html)
+    def test_reject_full_account_and_invalid_bank_code(self):
+        with patch.dict(os.environ,{"ABD_BLUESEER_CONNECTED":"no"}):
+            with self.assertRaises(ValueError):
+                office_settings.save_bank({"ABD_BANK_LAST4":"1234567890"})
+            with self.assertRaises(ValueError):
+                office_settings.save_bank({"ABD_BLUESEER_PAYMENT_BANK":"BK\\nMALICIOUS"})
+    def test_native_bank_code_must_exist_before_use(self):
+        with patch.dict(os.environ,{"ABD_BLUESEER_CONNECTED":"yes"}):
+            with patch("blue_bridge.BlueSeerClient") as factory:
+                factory.return_value.call.return_value={"id":"BK","account":"10000000"}
+                saved=office_settings.save_bank({"ABD_BANK_NAME":"Local Bank",
+                    "ABD_BLUESEER_PAYMENT_BANK":"BK"})
+                self.assertEqual(saved["ABD_BLUESEER_PAYMENT_BANK"],"BK")
+            with patch("blue_bridge.BlueSeerClient") as factory:
+                factory.return_value.call.return_value={"id":"","account":""}
+                with self.assertRaises(ValueError):
+                    office_settings.save_bank({"ABD_BLUESEER_PAYMENT_BANK":"XYZ"})
+
     def test_shop_handler_exposes_settings(self):
         self.assertTrue(hasattr(desk.Handler,"do_GET"))
         self.assertTrue(hasattr(desk.Handler,"do_POST"))
