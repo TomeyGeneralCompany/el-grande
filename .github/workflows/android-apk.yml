@@ -31,6 +31,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
+      - name: Check Python syntax
+        run: python -m compileall -q integrations/all_by_devoll android/app/src/main/python
       - name: Build offline-capable APK
         working-directory: android
         run: gradle --no-daemon :app:assembleDebug
