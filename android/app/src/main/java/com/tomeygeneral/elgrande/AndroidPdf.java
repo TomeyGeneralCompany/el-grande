@@ -22,6 +22,7 @@ public final class AndroidPdf {
         Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         int page = 0;
         Canvas canvas = null;
+        PdfDocument.Page current = null;
         float y = 0;
         try {
             List<String> lines = new ArrayList<>();
@@ -87,7 +88,6 @@ public final class AndroidPdf {
         }
     }
 
-    private static PdfDocument.Page current;
 
     private static List<String> wrap(String text, Paint paint, float width) {
         List<String> result = new ArrayList<>();
