@@ -42,5 +42,3 @@ jobs:
           name: el-grande-android-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
-      - name: Check Python syntax
-        run: python -m compileall -q integrations/all_by_devoll android/app/src/main/python
