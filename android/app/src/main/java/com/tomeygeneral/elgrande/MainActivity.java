@@ -33,15 +33,21 @@ public class MainActivity extends Activity {
     private static final String ROOT = "http://127.0.0.1:8765";
     private WebView web;
     private final Handler ui = new Handler(Looper.getMainLooper());
+    private static String processSession;
     private String session;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
-        byte[] random = new byte[32];
-        new SecureRandom().nextBytes(random);
-        StringBuilder key = new StringBuilder();
-        for (byte b : random) key.append(String.format(java.util.Locale.ROOT, "%02x", b & 0xff));
-        session = key.toString();
+        synchronized (MainActivity.class) {
+            if (processSession == null) {
+                byte[] random = new byte[32];
+                new SecureRandom().nextBytes(random);
+                StringBuilder key = new StringBuilder();
+                for (byte b : random) key.append(String.format(java.util.Locale.ROOT, "%02x", b & 0xff));
+                processSession = key.toString();
+            }
+            session = processSession;
+        }
 
         FrameLayout frame = new FrameLayout(this);
         web = new WebView(this);
